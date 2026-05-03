@@ -1,0 +1,36 @@
+<table class="inspector-table">
+    <thead>
+        <tr>
+            <th>Method</th>
+            <th>Path</th>
+            <th>Status</th>
+            <th>Latency</th>
+            <th>Time</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for event in page.object_list %}
+        <tr>
+            <td>
+                <a href="{% url 'inspector:request-detail' event.pk %}">
+                    <span class="inspector-method-badge inspector-method-badge--{{ event.metadata.method|lower }}">{{ event.metadata.method }}</span>
+                </a>
+            </td>
+            <td><a href="{% url 'inspector:request-detail' event.pk %}">{{ event.metadata.path }}</a></td>
+            <td>
+                <a href="{% url 'inspector:request-detail' event.pk %}">
+                    {% with sc=event.metadata.status_code %}
+                    <span class="inspector-badge {% if sc >= 200 and sc < 300 %}inspector-badge--2xx{% elif sc >= 300 and sc < 400 %}inspector-badge--3xx{% elif sc >= 400 and sc < 500 %}inspector-badge--4xx{% elif sc >= 500 %}inspector-badge--5xx{% endif %}">{{ sc }}</span>
+                    {% endwith %}
+                </a>
+            </td>
+            <td><a href="{% url 'inspector:request-detail' event.pk %}">{{ event.metadata.latency_ms }}ms</a></td>
+            <td><a href="{% url 'inspector:request-detail' event.pk %}">{{ event.timestamp|timesince }} ago</a></td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="5" style="text-align: center; padding: 40px; color: var(--ins-text-secondary);">No requests recorded yet.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

@@ -1,0 +1,67 @@
+{% extends "inspector/base.html" %}
+{% block title %}Query Detail — Inspector{% endblock %}
+{% block content %}
+<a href="{% url 'inspector:queries-list' %}" class="inspector-back-link">&#8592; Back to Queries</a>
+
+<div class="inspector-page-header">
+    <h1>Query Detail</h1>
+</div>
+
+<div class="inspector-card">
+    <h3 style="margin-bottom: 12px; font-size: 14px; color: var(--ins-text-secondary); text-transform: uppercase;">SQL</h3>
+    <pre class="inspector-code">{{ event.metadata.sql }}</pre>
+</div>
+
+{% if event.metadata.params %}
+<div class="inspector-card">
+    <h3 style="margin-bottom: 12px; font-size: 14px; color: var(--ins-text-secondary); text-transform: uppercase;">Parameters</h3>
+    <pre class="inspector-code">{{ event.metadata.params }}</pre>
+</div>
+{% endif %}
+
+<div class="inspector-card">
+    <table class="inspector-detail-table">
+        <tr>
+            <th>Duration</th>
+            <td>
+                {{ event.metadata.duration_ms }}ms
+                {% if event.metadata.is_slow %}<span class="inspector-indicator inspector-indicator--slow">SLOW</span>{% endif %}
+            </td>
+        </tr>
+        <tr>
+            <th>Database</th>
+            <td>{{ event.metadata.db_alias }}</td>
+        </tr>
+        <tr>
+            <th>Origin File</th>
+            <td>{{ event.metadata.origin_file|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Origin Line</th>
+            <td>{{ event.metadata.origin_line|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Origin Function</th>
+            <td>{{ event.metadata.origin_function|default:"-" }}</td>
+        </tr>
+        <tr>
+            <th>Flags</th>
+            <td>
+                {% if event.metadata.is_slow %}<span class="inspector-indicator inspector-indicator--slow">SLOW</span>{% endif %}
+                {% if event.metadata.n_plus_one %}<span class="inspector-indicator inspector-indicator--n-plus-one">N+1</span>{% endif %}
+                {% if event.metadata.is_duplicate %}<span class="inspector-indicator inspector-indicator--duplicate">DUP</span> ({{ event.metadata.duplicate_count }}x){% endif %}
+                {% if not event.metadata.is_slow and not event.metadata.n_plus_one and not event.metadata.is_duplicate %}-{% endif %}
+            </td>
+        </tr>
+    </table>
+</div>
+
+{% if parent_request %}
+<div class="inspector-card">
+    <a href="{% url 'inspector:request-detail' parent_request.pk %}" style="color: var(--ins-accent); text-decoration: none; font-weight: 500;">
+        View Request &#8594; {{ parent_request.metadata.method }} {{ parent_request.metadata.path }}
+    </a>
+</div>
+{% endif %}
+
+{% endblock %}

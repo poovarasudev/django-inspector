@@ -1,0 +1,28 @@
+<table class="inspector-table">
+    <thead>
+        <tr>
+            <th>Exception Type</th>
+            <th>Message</th>
+            <th>Request Path</th>
+            <th>Time</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for event in page.object_list %}
+        <tr>
+            <td>
+                <a href="{% url 'inspector:exception-detail' event.pk %}">
+                    <span class="inspector-exc-badge">{{ event.metadata.exception_type }}</span>
+                </a>
+            </td>
+            <td><a href="{% url 'inspector:exception-detail' event.pk %}">{{ event.metadata.exception_message|truncatechars:80 }}</a></td>
+            <td>{{ event.metadata.request_path|default:"-" }}</td>
+            <td>{{ event.timestamp|timesince }} ago</td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="4" style="text-align: center; padding: 40px; color: var(--ins-text-secondary);">No exceptions found.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

@@ -1,0 +1,36 @@
+{% extends "inspector/base.html" %}
+{% block title %}SQL Queries — Inspector{% endblock %}
+{% block content %}
+<div class="inspector-page-header">
+    <h1>SQL Queries</h1>
+</div>
+
+<form class="inspector-filter-bar"
+      hx-get="{% url 'inspector:queries-list' %}"
+      hx-target="#results-table"
+      hx-push-url="true"
+      hx-trigger="change">
+    <label>
+        <input type="checkbox" name="slow" {% if filters.slow == "on" %}checked{% endif %}> Slow
+    </label>
+    <label>
+        <input type="checkbox" name="n_plus_one" {% if filters.n_plus_one == "on" %}checked{% endif %}> N+1
+    </label>
+    <label>
+        <input type="checkbox" name="duplicate" {% if filters.duplicate == "on" %}checked{% endif %}> Duplicate
+    </label>
+    <label>
+        Database
+        <select name="db_alias">
+            <option value="">All</option>
+            <option value="default" {% if filters.db_alias == "default" %}selected{% endif %}>default</option>
+        </select>
+    </label>
+</form>
+
+<div id="results-table">
+    {% include "inspector/queries/_table.html" %}
+</div>
+
+{% include "inspector/_pagination.html" %}
+{% endblock %}

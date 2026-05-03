@@ -1,0 +1,32 @@
+<table class="inspector-table">
+    <thead>
+        <tr>
+            <th>SQL</th>
+            <th>Duration</th>
+            <th>DB</th>
+            <th>Flags</th>
+            <th>Time</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for event in page.object_list %}
+        <tr>
+            <td>
+                <a href="{% url 'inspector:query-detail' event.pk %}" class="inspector-code-inline">{{ event.metadata.sql|truncatechars:80 }}</a>
+            </td>
+            <td>{{ event.metadata.duration_ms }}ms</td>
+            <td>{{ event.metadata.db_alias }}</td>
+            <td>
+                {% if event.metadata.is_slow %}<span class="inspector-indicator inspector-indicator--slow">SLOW</span>{% endif %}
+                {% if event.metadata.n_plus_one %}<span class="inspector-indicator inspector-indicator--n-plus-one">N+1</span>{% endif %}
+                {% if event.metadata.is_duplicate %}<span class="inspector-indicator inspector-indicator--duplicate">DUP</span>{% endif %}
+            </td>
+            <td>{{ event.timestamp|timesince }} ago</td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="5" style="text-align: center; padding: 40px; color: var(--ins-text-secondary);">No queries found.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

@@ -1,0 +1,83 @@
+{% extends "inspector/base.html" %}
+{% block title %}Exception Detail — Inspector{% endblock %}
+{% block content %}
+<a href="{% url 'inspector:exceptions-list' %}" class="inspector-back-link">&#8592; Back to Exceptions</a>
+
+<div class="inspector-page-header">
+    <h1>
+        <span class="inspector-exc-badge" style="font-size: 16px;">{{ event.metadata.exception_type }}</span>
+    </h1>
+</div>
+
+<div class="inspector-card">
+    <h3 style="margin-bottom: 8px; font-size: 14px; color: var(--ins-text-secondary); text-transform: uppercase;">Message</h3>
+    <p style="font-size: 15px;">{{ event.metadata.exception_message }}</p>
+    <p style="font-size: 12px; color: var(--ins-text-secondary); margin-top: 8px;">{{ event.timestamp }}</p>
+</div>
+
+<!-- Stack Trace -->
+<div class="inspector-card">
+    <h3 style="margin-bottom: 12px; font-size: 14px; color: var(--ins-text-secondary); text-transform: uppercase;">Stack Trace</h3>
+    <pre class="inspector-code">{% for line in event.metadata.stack_trace %}{{ line }}{% endfor %}</pre>
+</div>
+
+<!-- Frames with locals -->
+{% if event.metadata.frames %}
+<div class="inspector-card">
+    <h3 style="margin-bottom: 12px; font-size: 14px; color: var(--ins-text-secondary); text-transform: uppercase;">Frames</h3>
+    {% for frame in event.metadata.frames %}
+    <div style="border-bottom: 1px solid var(--ins-border); padding: 12px 0; {% if forloop.last %}border-bottom: none;{% endif %}">
+        <div style="font-weight: 600; font-size: 13px;">
+            {{ frame.file }}:{{ frame.line }} in <code>{{ frame.function }}</code>
+        </div>
+        {% if frame.locals %}
+        <details style="margin-top: 6px;">
+            <summary style="font-size: 12px; color: var(--ins-text-secondary); cursor: pointer;">Local variables</summary>
+            <table class="inspector-detail-table" style="margin-top: 4px; font-size: 12px;">
+                {% for var_name, var_value in frame.locals.items %}
+                <tr>
+                    <th style="width: 120px; font-family: monospace;">{{ var_name }}</th>
+                    <td><code>{{ var_value|truncatechars:200 }}</code></td>
+                </tr>
+                {% endfor %}
+            </table>
+        </details>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Chained Exceptions -->
+{% if event.metadata.chained_exceptions %}
+<div class="inspector-card">
+    <h3 style="margin-bottom: 12px; font-size: 14px; color: var(--ins-text-secondary); text-transform: uppercase;">Chained Exceptions</h3>
+    {% for chain in event.metadata.chained_exceptions %}
+    <div class="inspector-card" style="margin-bottom: 12px; border-left: 3px solid var(--ins-status-5xx);">
+        <div style="font-size: 12px; color: var(--ins-text-secondary); margin-bottom: 4px;">
+            {% if chain.chain_type == "cause" %}Caused by{% else %}During handling of{% endif %}
+        </div>
+        <div style="font-weight: 600;">
+            <span class="inspector-exc-badge">{{ chain.type }}</span>
+        </div>
+        <div style="margin: 8px 0;">{{ chain.message }}</div>
+        {% if chain.stack_trace %}
+        <pre class="inspector-code" style="font-size: 12px;">{% for line in chain.stack_trace %}{{ line }}{% endfor %}</pre>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Parent Request Link -->
+{% if parent_request %}
+<div class="inspector-card">
+    <a href="{% url 'inspector:request-detail' parent_request.pk %}" style="color: var(--ins-accent); text-decoration: none; font-weight: 500;">
+        View Request &#8594;
+        <span class="inspector-method-badge inspector-method-badge--{{ parent_request.metadata.method|lower }}">{{ parent_request.metadata.method }}</span>
+        {{ parent_request.metadata.path }}
+    </a>
+</div>
+{% endif %}
+
+{% endblock %}

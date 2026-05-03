@@ -1,0 +1,54 @@
+{% extends "inspector/base.html" %}
+{% block title %}Requests — Inspector{% endblock %}
+{% block content %}
+<div class="inspector-page-header">
+    <h1>Requests</h1>
+</div>
+
+<form class="inspector-filter-bar"
+      hx-get="{% url 'inspector:requests-list' %}"
+      hx-target="#results-table"
+      hx-push-url="true"
+      hx-trigger="change from:select, input[type=text]:keyup changed delay:300ms, change from:input[type=date]">
+    <label>
+        Method
+        <select name="method">
+            <option value="">All</option>
+            {% for m in "GET,POST,PUT,PATCH,DELETE"|make_list %}{% endfor %}
+            <option value="GET" {% if filters.method == "GET" %}selected{% endif %}>GET</option>
+            <option value="POST" {% if filters.method == "POST" %}selected{% endif %}>POST</option>
+            <option value="PUT" {% if filters.method == "PUT" %}selected{% endif %}>PUT</option>
+            <option value="PATCH" {% if filters.method == "PATCH" %}selected{% endif %}>PATCH</option>
+            <option value="DELETE" {% if filters.method == "DELETE" %}selected{% endif %}>DELETE</option>
+        </select>
+    </label>
+    <label>
+        Status
+        <select name="status">
+            <option value="">All</option>
+            <option value="2xx" {% if filters.status == "2xx" %}selected{% endif %}>2xx</option>
+            <option value="3xx" {% if filters.status == "3xx" %}selected{% endif %}>3xx</option>
+            <option value="4xx" {% if filters.status == "4xx" %}selected{% endif %}>4xx</option>
+            <option value="5xx" {% if filters.status == "5xx" %}selected{% endif %}>5xx</option>
+        </select>
+    </label>
+    <label>
+        Path
+        <input type="text" name="path" placeholder="Filter path..." value="{{ filters.path|default:'' }}">
+    </label>
+    <label>
+        From
+        <input type="date" name="from_date" value="{{ filters.from_date|default:'' }}">
+    </label>
+    <label>
+        To
+        <input type="date" name="to_date" value="{{ filters.to_date|default:'' }}">
+    </label>
+</form>
+
+<div id="results-table">
+    {% include "inspector/requests/_table.html" %}
+</div>
+
+{% include "inspector/_pagination.html" %}
+{% endblock %}

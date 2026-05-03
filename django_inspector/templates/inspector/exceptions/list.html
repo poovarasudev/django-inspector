@@ -1,0 +1,37 @@
+{% extends "inspector/base.html" %}
+{% block title %}Exceptions — Inspector{% endblock %}
+{% block content %}
+<div class="inspector-page-header">
+    <h1>Exceptions</h1>
+</div>
+
+<form class="inspector-filter-bar"
+      hx-get="{% url 'inspector:exceptions-list' %}"
+      hx-target="#results-table"
+      hx-push-url="true"
+      hx-trigger="change from:select, change from:input[type=date]">
+    <label>
+        Type
+        <select name="exc_type">
+            <option value="">All</option>
+            {% for t in exception_types %}
+            <option value="{{ t }}" {% if filters.exc_type == t %}selected{% endif %}>{{ t }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>
+        From
+        <input type="date" name="from_date" value="{{ filters.from_date|default:'' }}">
+    </label>
+    <label>
+        To
+        <input type="date" name="to_date" value="{{ filters.to_date|default:'' }}">
+    </label>
+</form>
+
+<div id="results-table">
+    {% include "inspector/exceptions/_table.html" %}
+</div>
+
+{% include "inspector/_pagination.html" %}
+{% endblock %}

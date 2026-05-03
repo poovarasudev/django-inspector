@@ -1,0 +1,197 @@
+{% extends "inspector/base.html" %}
+{% block title %}Request Detail — Inspector{% endblock %}
+{% block content %}
+<a href="{% url 'inspector:requests-list' %}" class="inspector-back-link">&#8592; Back to Requests</a>
+
+<div class="inspector-page-header">
+    <h1>
+        <span class="inspector-method-badge inspector-method-badge--{{ event.metadata.method|lower }}">{{ event.metadata.method }}</span>
+        {{ event.metadata.path }}
+        {% with sc=event.metadata.status_code %}
+        <span class="inspector-badge {% if sc >= 200 and sc < 300 %}inspector-badge--2xx{% elif sc >= 300 and sc < 400 %}inspector-badge--3xx{% elif sc >= 400 and sc < 500 %}inspector-badge--4xx{% elif sc >= 500 %}inspector-badge--5xx{% endif %}">{{ sc }}</span>
+        {% endwith %}
+        <span style="font-size: 14px; font-weight: 400; color: var(--ins-text-secondary); margin-left: 8px;">{{ event.metadata.latency_ms }}ms</span>
+    </h1>
+</div>
+
+<!-- Summary cards -->
+<div class="inspector-summary">
+    <div class="inspector-summary-card">
+        <div class="inspector-summary-card__value">{{ summary.total_queries }}</div>
+        <div class="inspector-summary-card__label">Total Queries</div>
+    </div>
+    <div class="inspector-summary-card">
+        <div class="inspector-summary-card__value">{{ summary.total_query_time }}ms</div>
+        <div class="inspector-summary-card__label">Query Time</div>
+    </div>
+    <div class="inspector-summary-card">
+        <div class="inspector-summary-card__value">{{ summary.exception_count }}</div>
+        <div class="inspector-summary-card__label">Exceptions</div>
+    </div>
+    <div class="inspector-summary-card">
+        <div class="inspector-summary-card__value">{{ summary.latency_ms }}ms</div>
+        <div class="inspector-summary-card__label">Request Time</div>
+    </div>
+    <div class="inspector-summary-card">
+        <div class="inspector-summary-card__value">{{ summary.slow_queries }}</div>
+        <div class="inspector-summary-card__label">Slow Queries</div>
+    </div>
+</div>
+
+<!-- View switcher -->
+<div class="inspector-view-switcher">
+    <a href="?view=timeline" class="inspector-view-switcher__link {% if view == 'timeline' %}inspector-view-switcher__link--active{% endif %}">Timeline</a>
+    <a href="?view=tabs" class="inspector-view-switcher__link {% if view == 'tabs' %}inspector-view-switcher__link--active{% endif %}">Tabs</a>
+    <a href="?view=waterfall" class="inspector-view-switcher__link {% if view == 'waterfall' %}inspector-view-switcher__link--active{% endif %}">Waterfall</a>
+</div>
+
+<!-- Timeline view -->
+{% if view == "timeline" %}
+<div class="inspector-card">
+    <div class="inspector-timeline">
+        {% for e in trace_events %}
+        <div class="inspector-timeline-item {% if e.event_type == 'sql.query' %}inspector-timeline-item--sql{% elif e.event_type == 'exception.raised' %}inspector-timeline-item--exception{% else %}inspector-timeline-item--request{% endif %}">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <strong style="font-size: 12px; text-transform: uppercase; color: var(--ins-text-secondary);">
+                    {% if e.event_type == "request.completed" %}Request
+                    {% elif e.event_type == "sql.query" %}SQL Query
+                    {% elif e.event_type == "exception.raised" %}Exception
+                    {% else %}{{ e.event_type }}{% endif %}
+                </strong>
+                <span style="font-size: 12px; color: var(--ins-text-secondary);">{{ e.timestamp|timesince }} ago</span>
+            </div>
+            {% if e.event_type == "request.completed" %}
+                <div>{{ e.metadata.method }} {{ e.metadata.path }} — {{ e.metadata.status_code }}</div>
+            {% elif e.event_type == "sql.query" %}
+                <div class="inspector-code-inline" style="margin-bottom: 4px;">{{ e.metadata.sql|truncatechars:100 }}</div>
+                <div style="font-size: 12px; color: var(--ins-text-secondary);">
+                    {{ e.metadata.duration_ms }}ms
+                    {% if e.metadata.is_slow %}<span class="inspector-indicator inspector-indicator--slow">SLOW</span>{% endif %}
+                    {% if e.metadata.n_plus_one %}<span class="inspector-indicator inspector-indicator--n-plus-one">N+1</span>{% endif %}
+                    {% if e.metadata.is_duplicate %}<span class="inspector-indicator inspector-indicator--duplicate">DUP</span>{% endif %}
+                </div>
+            {% elif e.event_type == "exception.raised" %}
+                <div style="color: var(--ins-status-5xx); font-weight: 600;">{{ e.metadata.exception_type }}</div>
+                <div style="font-size: 13px;">{{ e.metadata.exception_message|truncatechars:120 }}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Tabs view -->
+{% elif view == "tabs" %}
+<div class="inspector-card">
+    <div class="inspector-tabs">
+        <button class="inspector-tab inspector-tab--active" onclick="switchTab('request-tab')">Request</button>
+        <button class="inspector-tab" onclick="switchTab('queries-tab')">Queries ({{ queries|length }})</button>
+        <button class="inspector-tab" onclick="switchTab('exceptions-tab')">Exceptions ({{ exceptions|length }})</button>
+    </div>
+
+    <div id="request-tab" class="inspector-tab-panel inspector-tab-panel--active">
+        <table class="inspector-detail-table">
+            <tr><th>Method</th><td>{{ event.metadata.method }}</td></tr>
+            <tr><th>Path</th><td>{{ event.metadata.path }}</td></tr>
+            <tr><th>Full URL</th><td>{{ event.metadata.full_url }}</td></tr>
+            <tr><th>Status Code</th><td>{{ event.metadata.status_code }}</td></tr>
+            <tr><th>Latency</th><td>{{ event.metadata.latency_ms }}ms</td></tr>
+            <tr><th>User</th><td>{{ event.metadata.user|default:"-" }}</td></tr>
+            <tr><th>Client IP</th><td>{{ event.metadata.client_ip|default:"-" }}</td></tr>
+            <tr><th>Session ID</th><td>{{ event.metadata.session_id|default:"-" }}</td></tr>
+            {% if event.metadata.request_headers %}
+            <tr><th>Request Headers</th><td><pre class="inspector-code" style="margin: 0;">{% for k, v in event.metadata.request_headers.items %}{{ k }}: {{ v }}
+{% endfor %}</pre></td></tr>
+            {% endif %}
+            {% if event.metadata.request_body %}
+            <tr><th>Request Body</th><td><pre class="inspector-code" style="margin: 0;">{{ event.metadata.request_body }}</pre></td></tr>
+            {% endif %}
+        </table>
+    </div>
+
+    <div id="queries-tab" class="inspector-tab-panel">
+        <table class="inspector-table">
+            <thead>
+                <tr>
+                    <th>SQL</th>
+                    <th>Duration</th>
+                    <th>DB</th>
+                    <th>Origin</th>
+                    <th>Flags</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for q in queries %}
+                <tr>
+                    <td><a href="{% url 'inspector:query-detail' q.pk %}" class="inspector-code-inline">{{ q.metadata.sql|truncatechars:80 }}</a></td>
+                    <td>{{ q.metadata.duration_ms }}ms</td>
+                    <td>{{ q.metadata.db_alias }}</td>
+                    <td style="font-size: 12px;">{{ q.metadata.origin_file|default:"" }}:{{ q.metadata.origin_line|default:"" }}</td>
+                    <td>
+                        {% if q.metadata.is_slow %}<span class="inspector-indicator inspector-indicator--slow">SLOW</span>{% endif %}
+                        {% if q.metadata.n_plus_one %}<span class="inspector-indicator inspector-indicator--n-plus-one">N+1</span>{% endif %}
+                        {% if q.metadata.is_duplicate %}<span class="inspector-indicator inspector-indicator--duplicate">DUP</span>{% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--ins-text-secondary);">No queries in this trace.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div id="exceptions-tab" class="inspector-tab-panel">
+        <table class="inspector-table">
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Message</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for exc in exceptions %}
+                <tr>
+                    <td><a href="{% url 'inspector:exception-detail' exc.pk %}" class="inspector-exc-badge">{{ exc.metadata.exception_type }}</a></td>
+                    <td>{{ exc.metadata.exception_message|truncatechars:100 }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="2" style="text-align: center; padding: 20px; color: var(--ins-text-secondary);">No exceptions in this trace.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function switchTab(tabId) {
+    document.querySelectorAll('.inspector-tab-panel').forEach(p => p.classList.remove('inspector-tab-panel--active'));
+    document.querySelectorAll('.inspector-tab').forEach(t => t.classList.remove('inspector-tab--active'));
+    document.getElementById(tabId).classList.add('inspector-tab-panel--active');
+    event.target.classList.add('inspector-tab--active');
+}
+</script>
+
+<!-- Waterfall view -->
+{% elif view == "waterfall" %}
+<div class="inspector-card">
+    <div class="inspector-waterfall">
+        {% for wf in waterfall_events %}
+        <div class="inspector-waterfall-row">
+            <div class="inspector-waterfall-label">
+                {% if wf.event.event_type == "request.completed" %}Request
+                {% elif wf.event.event_type == "sql.query" %}SQL
+                {% elif wf.event.event_type == "exception.raised" %}Exception
+                {% else %}{{ wf.event.event_type }}{% endif %}
+            </div>
+            <div class="inspector-waterfall-track">
+                <div class="inspector-waterfall-bar {% if wf.event.event_type == 'request.completed' %}inspector-waterfall-bar--request{% elif wf.event.event_type == 'sql.query' %}inspector-waterfall-bar--sql{% elif wf.event.event_type == 'exception.raised' %}inspector-waterfall-bar--exception{% endif %}"
+                     style="margin-left: {{ wf.offset_pct }}%; width: {{ wf.width_pct }}%;">
+                    {{ wf.duration_ms }}ms
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
