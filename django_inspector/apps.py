@@ -13,6 +13,7 @@ class DjangoInspectorConfig(AppConfig):
         if not inspector_settings.is_enabled:
             return
 
+        self._watcher_instances = []
         self._autodiscover_watchers()
 
     def _autodiscover_watchers(self):
@@ -23,7 +24,22 @@ class DjangoInspectorConfig(AppConfig):
         from django_inspector.conf import inspector_settings
         from django_inspector.watchers import registry
 
+        # Import concrete watchers to trigger self-registration
+        try:
+            import django_inspector.watchers.request  # noqa: F401
+        except ImportError:
+            pass
+        try:
+            import django_inspector.watchers.sql  # noqa: F401
+        except ImportError:
+            pass
+        try:
+            import django_inspector.watchers.exception  # noqa: F401
+        except ImportError:
+            pass
+
         for name, watcher_class in registry.all_watchers().items():
             watcher = watcher_class()
             if inspector_settings.watcher_enabled(name):
                 watcher.enable()
+            self._watcher_instances.append(watcher)

@@ -4,6 +4,9 @@ INSTALLED_APPS = [
     "django.contrib.auth",
     "django_inspector",
 ]
+MIDDLEWARE = [
+    "django_inspector.middleware.InspectorMiddleware",
+]
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
