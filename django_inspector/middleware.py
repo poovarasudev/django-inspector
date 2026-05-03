@@ -15,7 +15,8 @@ class InspectorMiddleware:
     2. Store that trace_id in contextvars (async-safe) for the duration
        of the request so any code — watchers, views, signal handlers —
        can call get_current_trace_id() to retrieve it.
-    3. Clean up the context variable after the response is returned.
+    3. Flush buffered watcher events to the database at end-of-request.
+    4. Clean up the context variable after the response is returned.
 
     Add to MIDDLEWARE *before* any other middleware that needs trace context:
         MIDDLEWARE = [
@@ -38,6 +39,14 @@ class InspectorMiddleware:
         try:
             response = self.get_response(request)
         finally:
+            self._flush()
             clear_trace_id(token)
 
         return response
+
+    def _flush(self):
+        try:
+            from django_inspector.storage.flush import flush_events
+            flush_events()
+        except Exception:
+            pass

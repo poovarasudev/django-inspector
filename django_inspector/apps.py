@@ -17,7 +17,13 @@ class DjangoInspectorConfig(AppConfig):
 
     def _autodiscover_watchers(self):
         """
-        Auto-discover and register all watcher modules.
-        Watchers are imported here so their signals/hooks are connected.
+        Import watcher modules (triggering self-registration) then
+        instantiate and enable each registered watcher based on settings.
         """
-        from django_inspector.watchers import registry  # noqa: F401
+        from django_inspector.conf import inspector_settings
+        from django_inspector.watchers import registry
+
+        for name, watcher_class in registry.all_watchers().items():
+            watcher = watcher_class()
+            if inspector_settings.watcher_enabled(name):
+                watcher.enable()
