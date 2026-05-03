@@ -1,0 +1,22 @@
+<aside class="inspector-sidebar">
+    <div class="inspector-sidebar-title">&#128269; Inspector</div>
+    <nav class="inspector-sidebar-nav">
+        <a href="{% url 'inspector:live-feed' %}"
+           class="inspector-sidebar-link {% if request.resolver_match.url_name == 'live-feed' %}inspector-sidebar-link--active{% endif %}">
+            Live Feed
+        </a>
+        <a href="{% url 'inspector:requests-list' %}"
+           class="inspector-sidebar-link {% if request.resolver_match.url_name == 'requests-list' or request.resolver_match.url_name == 'request-detail' %}inspector-sidebar-link--active{% endif %}">
+            Requests
+        </a>
+        <a href="{% url 'inspector:queries-list' %}"
+           class="inspector-sidebar-link {% if request.resolver_match.url_name == 'queries-list' or request.resolver_match.url_name == 'query-detail' %}inspector-sidebar-link--active{% endif %}">
+            Queries
+        </a>
+        <a href="{% url 'inspector:exceptions-list' %}"
+           class="inspector-sidebar-link {% if request.resolver_match.url_name == 'exceptions-list' or request.resolver_match.url_name == 'exception-detail' %}inspector-sidebar-link--active{% endif %}">
+            Exceptions
+        </a>
+    </nav>
+    <div class="inspector-sidebar-version">v0.1.0</div>
+</aside>
