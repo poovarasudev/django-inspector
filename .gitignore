@@ -185,4 +185,5 @@ cython_debug/
 .windsurf/
 .planning/
 .github/
+.claude/
 prd.md
