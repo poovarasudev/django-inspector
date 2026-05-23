@@ -1,4 +1,5 @@
 from django_inspector.conf import inspector_settings
+from django_inspector.sampling import compute_sampling_decision, set_sampled
 from django_inspector.tracing.context import (
     clear_trace_id,
     generate_trace_id,
@@ -36,12 +37,19 @@ class InspectorMiddleware:
         trace_id = generate_trace_id()
         token = set_trace_id(trace_id)
         request.inspector_trace_id = trace_id
+        set_sampled(True)
 
         self._notify_request_start(request)
 
         try:
             response = self.get_response(request)
             self._notify_request_end(request, response)
+            sampled = compute_sampling_decision(request, response)
+            set_sampled(sampled)
+            request.inspector_sampled = sampled
+            if not sampled:
+                from django_inspector.storage.flush import clear_buffer
+                clear_buffer()
         finally:
             self._flush()
             clear_trace_id(token)
