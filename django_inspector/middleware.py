@@ -34,6 +34,10 @@ class InspectorMiddleware:
         if not inspector_settings.is_enabled:
             return self.get_response(request)
 
+        from django_inspector.ignores import should_ignore_path
+        if should_ignore_path(request.path):
+            return self.get_response(request)
+
         trace_id = generate_trace_id()
         token = set_trace_id(trace_id)
         request.inspector_trace_id = trace_id

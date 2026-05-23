@@ -45,6 +45,10 @@ class ExceptionWatcher(BaseWatcher):
         if exc_type is None or exc_value is None:
             return
 
+        from django_inspector.ignores import should_ignore_exception
+        if should_ignore_exception(exc_value):
+            return
+
         metadata = {
             # EXC-01: type, message, full stack trace
             "exception_type": f"{exc_type.__module__}.{exc_type.__qualname__}",
