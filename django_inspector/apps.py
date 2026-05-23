@@ -1,4 +1,8 @@
+import logging
+
 from django.apps import AppConfig
+
+_logger = logging.getLogger("django_inspector")
 
 
 class DjangoInspectorConfig(AppConfig):
@@ -15,6 +19,22 @@ class DjangoInspectorConfig(AppConfig):
 
         self._watcher_instances = []
         self._autodiscover_watchers()
+        self._check_production_auth_config(inspector_settings)
+
+    def _check_production_auth_config(self, inspector_settings):
+        """Warn at startup when running in production with only default is_staff protection (AUTH-04)."""
+        from django.conf import settings as django_settings
+        is_debug = getattr(django_settings, "DEBUG", True)
+        if not is_debug:
+            perm = inspector_settings.INSPECTOR_DASHBOARD_PERMISSION
+            allowlist = inspector_settings.INSPECTOR_DASHBOARD_IP_ALLOWLIST
+            if perm is None and not allowlist:
+                _logger.warning(
+                    "django-inspector: dashboard is running in production (DEBUG=False) with "
+                    "default is_staff permission only. Set INSPECTOR_DASHBOARD_PERMISSION or "
+                    "INSPECTOR_DASHBOARD_IP_ALLOWLIST to restrict access, or set "
+                    "INSPECTOR_ENABLED=False to disable the dashboard entirely."
+                )
 
     def _autodiscover_watchers(self):
         """
