@@ -3,19 +3,21 @@ Event flush manager — buffers events in memory and writes them to the
 database via bulk_create. Called by InspectorMiddleware at end-of-request.
 """
 
-import threading
+from contextvars import ContextVar
 from typing import List
 
 from django_inspector.conf import inspector_settings
 
-_local = threading.local()
+_buffer_var: ContextVar[List[dict]] = ContextVar("inspector_event_buffer", default=None)
 
 
 def _get_buffer() -> List[dict]:
-    """Return the per-request event buffer (thread-local list)."""
-    if not hasattr(_local, "event_buffer"):
-        _local.event_buffer = []
-    return _local.event_buffer
+    """Return the per-request event buffer (ContextVar-based, async-safe)."""
+    buf = _buffer_var.get()
+    if buf is None:
+        buf = []
+        _buffer_var.set(buf)
+    return buf
 
 
 def buffer_event(trace_id: str, event_type: str, metadata: dict) -> None:

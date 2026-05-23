@@ -8,7 +8,7 @@ Requirements: SQL-01..SQL-07
 import logging
 import time
 import traceback
-import threading
+from contextvars import ContextVar
 
 from django.db import connections
 
@@ -19,20 +19,23 @@ from django_inspector.watchers.registry import register
 
 logger = logging.getLogger("django_inspector")
 
-_local = threading.local()
+_query_log_var: ContextVar = ContextVar("inspector_query_log", default=None)
 
 
 def _get_query_log():
-    """Per-request query log for N+1 and duplicate detection."""
-    if not hasattr(_local, "query_log"):
-        _local.query_log = []
-    return _local.query_log
+    """Per-request query log for N+1 and duplicate detection (ContextVar-based, async-safe)."""
+    log = _query_log_var.get()
+    if log is None:
+        log = []
+        _query_log_var.set(log)
+    return log
 
 
 def clear_query_log():
     """Clear the per-request query log. Called at end-of-request."""
-    if hasattr(_local, "query_log"):
-        _local.query_log.clear()
+    log = _query_log_var.get()
+    if log is not None:
+        log.clear()
 
 
 class SQLWatcher(BaseWatcher):
