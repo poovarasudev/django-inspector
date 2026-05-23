@@ -13,6 +13,11 @@ DEFAULTS = {
     "SENSITIVE_KEYS": [],               # extra keys to redact (merged additive with built-in defaults in masking.py)
     "SAMPLING_RATE": 1.0,               # fraction of successful requests to capture (0.0–1.0); errors always captured
     "SLOW_REQUEST_THRESHOLD_MS": 1000,  # requests at or above this latency are always captured regardless of rate
+    "INSPECTOR_DASHBOARD_PERMISSION": None,  # dotted path to (request) -> bool callable; None = require is_staff
+    "INSPECTOR_DASHBOARD_IP_ALLOWLIST": [],  # list of IP address or CIDR strings; empty = no IP restriction
+    "IGNORE_PATHS": [],                 # list of regex strings matched against request.path; matching → skip entirely
+    "IGNORE_EXCEPTIONS": [],            # list of dotted exception class names; matching → not recorded by exception watcher
+    "INSPECTOR_RAISE_ERRORS": False,    # if True, inspector-internal errors propagate (useful in dev/tests)
 }
 
 
