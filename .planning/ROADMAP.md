@@ -67,8 +67,8 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 04-01: Sensitive-data masking + sampling
-- [ ] 04-02: Dashboard access control + ignore lists
+- [x] 04-01: Sensitive-data masking + sampling (`d4dc5db`)
+- [x] 04-02: Dashboard access control + ignore lists (`ed5daa5`)
 - [ ] 04-03: Async-safe buffers (ContextVar) + loud-by-default logging cleanup
 
 ---
