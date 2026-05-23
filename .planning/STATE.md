@@ -11,8 +11,8 @@ See: .planning/PROJECT.md (updated 2026-05-23)
 
 Phase: 4 of 7 (Safety & Hardening)
 Plan: 0 of 3 in current phase
-Status: Ready to plan
-Last activity: 2026-05-23 — Project re-initialized after archived v1.0; brownfield codebase mapped; v1.1 requirements and roadmap defined.
+Status: Planned — ready to execute
+Last activity: 2026-05-23 — Phase 4 planned: RESEARCH.md + 3 PLAN.md files written (04-01 masking/sampling, 04-02 dashboard auth/ignore lists, 04-03 ContextVar buffers/logging cleanup).
 
 Progress: [████░░░░░░] 47% (7 of 11 v1.1 plans done counting v1.0 plans as baseline — phase plans complete: v1.0 = 7 / total scoped through v1.1 = 16)
 
@@ -74,4 +74,5 @@ Items acknowledged and carried forward from previous milestone close:
 
 Last session: 2026-05-23
 Stopped at: `.planning/` re-initialized for v1.1 — config, codebase map (7 files), PROJECT.md, REQUIREMENTS.md, ROADMAP.md, STATE.md written.
-Resume file: None — next step is `/gsd-plan-phase 4` (Safety & Hardening).
+Resume file: `.planning/phases/04-safety-hardening/`
+Next step: Execute Phase 4 plans in order — 04-01 → 04-02 → 04-03 (sequential due to shared files: `conf.py`, `middleware.py`, `base.py`).

@@ -64,7 +64,7 @@ Plans:
   4. Running two `async def` views concurrently does not cross-contaminate SQL logs or event buffers.
   5. Requests matching `IGNORE_PATHS` produce zero events; exceptions matching `IGNORE_EXCEPTIONS` are not recorded.
   6. Every previously silent `except Exception: pass` now logs at `WARNING` (with `exc_info`), and the host request still succeeds.
-**Plans**: TBD — likely 3 plans (masking + sampling | dashboard auth + ignore lists | async-safe buffers + observability cleanup)
+**Plans**: 3 plans
 
 Plans:
 - [ ] 04-01: Sensitive-data masking + sampling
@@ -147,7 +147,7 @@ Phases not yet broken down.
 | 1. Foundation | v1.0 | 3/3 | Complete | 2026-05-03 |
 | 2. Watchers (Request/SQL/Exception) | v1.0 | 1/1 | Complete | 2026-05-03 |
 | 3. Dashboard | v1.0 | 3/3 | Complete | 2026-05-03 |
-| 4. Safety & Hardening | v1.1 | 0/3 | Not started | - |
+| 4. Safety & Hardening | v1.1 | 0/3 | Planned | - |
 | 5. Cache & Template Watchers | v1.1 | 0/2 | Not started | - |
 | 6. Signal & Logging Watchers | v1.1 | 0/2 | Not started | - |
 | 7. ASGI Verification & Release Prep | v1.1 | 0/2 | Not started | - |
