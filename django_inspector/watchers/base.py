@@ -77,9 +77,16 @@ class BaseWatcher(abc.ABC):
         if trace_id is None:
             return
 
+        from django_inspector.masking import mask_metadata
         from django_inspector.storage.flush import buffer_event
 
-        buffer_event(trace_id=trace_id, event_type=event_type, metadata=metadata)
+        try:
+            masked = mask_metadata(metadata)
+        except Exception:
+            logger.warning("inspector: masking failed, recording unmasked event", exc_info=True)
+            masked = metadata
+
+        buffer_event(trace_id=trace_id, event_type=event_type, metadata=masked)
 
     @abc.abstractmethod
     def install_hooks(self) -> None:
