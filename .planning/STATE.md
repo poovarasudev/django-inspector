@@ -1,3 +1,19 @@
+---
+gsd_state_version: 1.0
+milestone: v1.1
+milestone_name: Phase-1 Completion + Production Safety
+status: idle
+stopped_at: Phase 4 — Safety & Hardening complete (3/3 plans). 128 tests passing.
+last_updated: "2026-05-23T00:00:00.000Z"
+last_activity: 2026-05-23 -- Phase 4 complete — masking, sampling, dashboard auth, ignore lists, ContextVar buffers, loud-by-default logging
+progress:
+  total_phases: 4
+  completed_phases: 1
+  total_plans: 3
+  completed_plans: 3
+  percent: 100
+---
+
 # Project State
 
 ## Project Reference
@@ -5,20 +21,21 @@
 See: .planning/PROJECT.md (updated 2026-05-23)
 
 **Core value:** One dashboard, one trace, complete runtime visibility — every request's full story is reconstructable from a single trace id.
-**Current focus:** Phase 4 — Safety & Hardening (v1.1 milestone)
+**Current focus:** Phase 5 — Cache & Template Watchers (next)
 
 ## Current Position
 
-Phase: 4 of 7 (Safety & Hardening)
-Plan: 0 of 3 in current phase
-Status: Planned — ready to execute
-Last activity: 2026-05-23 — Phase 4 planned: RESEARCH.md + 3 PLAN.md files written (04-01 masking/sampling, 04-02 dashboard auth/ignore lists, 04-03 ContextVar buffers/logging cleanup).
+Phase: 4 (Safety & Hardening) — COMPLETE ✓
+Plan: 3/3 complete
+Status: Phase 4 done — ready to start Phase 5
+Last activity: 2026-05-23 — Phase 4 complete: masking.py, sampling.py, dashboard/auth.py, ignores.py, ContextVar migration (flush.py + sql.py), loud-by-default logging, 128 tests passing
 
-Progress: [████░░░░░░] 47% (7 of 11 v1.1 plans done counting v1.0 plans as baseline — phase plans complete: v1.0 = 7 / total scoped through v1.1 = 16)
+Progress: [██████░░░░] 62% (10 of 16 total v1.1 plans done — v1.0=7 + Phase4=3)
 
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed (v1.0 only): 7
 - Average duration: unknown (not tracked during v1.0)
 - Total execution time: unknown
@@ -32,6 +49,7 @@ Progress: [████░░░░░░] 47% (7 of 11 v1.1 plans done counting
 | 3. Dashboard | 3 | — | — |
 
 **Recent Trend:**
+
 - Last 5 plans: dashboard pages, inspector_cleanup, dashboard foundation, Request/SQL/Exception watchers, BaseWatcher framework
 - Trend: Stable (all shipped in one day, 2026-05-03)
 
@@ -73,6 +91,6 @@ Items acknowledged and carried forward from previous milestone close:
 ## Session Continuity
 
 Last session: 2026-05-23
-Stopped at: `.planning/` re-initialized for v1.1 — config, codebase map (7 files), PROJECT.md, REQUIREMENTS.md, ROADMAP.md, STATE.md written.
-Resume file: `.planning/phases/04-safety-hardening/`
-Next step: Execute Phase 4 plans in order — 04-01 → 04-02 → 04-03 (sequential due to shared files: `conf.py`, `middleware.py`, `base.py`).
+Stopped at: Phase 4 — Safety & Hardening complete. 3/3 plans executed, 128 tests passing.
+Resume file: `.planning/phases/05-cache-template-watchers/` (not yet created)
+Next step: `/gsd-plan-phase 5` (Cache & Template Watchers) — CACHE-01..07, TMPL-01..05.

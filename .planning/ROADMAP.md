@@ -69,7 +69,7 @@ Plans:
 Plans:
 - [x] 04-01: Sensitive-data masking + sampling (`d4dc5db`)
 - [x] 04-02: Dashboard access control + ignore lists (`ed5daa5`)
-- [ ] 04-03: Async-safe buffers (ContextVar) + loud-by-default logging cleanup
+- [x] 04-03: Async-safe buffers (ContextVar) + loud-by-default logging cleanup (`8b483ac`)
 
 ---
 
@@ -147,7 +147,7 @@ Phases not yet broken down.
 | 1. Foundation | v1.0 | 3/3 | Complete | 2026-05-03 |
 | 2. Watchers (Request/SQL/Exception) | v1.0 | 1/1 | Complete | 2026-05-03 |
 | 3. Dashboard | v1.0 | 3/3 | Complete | 2026-05-03 |
-| 4. Safety & Hardening | v1.1 | 0/3 | Planned | - |
+| 4. Safety & Hardening | v1.1 | 3/3 | Complete | 2026-05-23 |
 | 5. Cache & Template Watchers | v1.1 | 0/2 | Not started | - |
 | 6. Signal & Logging Watchers | v1.1 | 0/2 | Not started | - |
 | 7. ASGI Verification & Release Prep | v1.1 | 0/2 | Not started | - |
