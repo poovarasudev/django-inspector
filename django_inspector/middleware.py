@@ -1,3 +1,5 @@
+import logging
+
 from django_inspector.conf import inspector_settings
 from django_inspector.sampling import compute_sampling_decision, set_sampled
 from django_inspector.tracing.context import (
@@ -5,6 +7,8 @@ from django_inspector.tracing.context import (
     generate_trace_id,
     set_trace_id,
 )
+
+logger = logging.getLogger("django_inspector")
 
 
 class InspectorMiddleware:
@@ -76,7 +80,9 @@ class InspectorMiddleware:
                         inst.on_request(request)
                         break
         except Exception:
-            pass
+            if inspector_settings.INSPECTOR_RAISE_ERRORS:
+                raise
+            logger.debug("inspector: error in _notify_request_start", exc_info=True)
 
     def _notify_request_end(self, request, response):
         """Notify the request watcher at end of request (before flush)."""
@@ -89,16 +95,22 @@ class InspectorMiddleware:
                     inst.on_response(request, response)
                     break
         except Exception:
-            pass
+            if inspector_settings.INSPECTOR_RAISE_ERRORS:
+                raise
+            logger.debug("inspector: error in _notify_request_end", exc_info=True)
 
     def _flush(self):
         try:
             from django_inspector.storage.flush import flush_events
             flush_events()
         except Exception:
-            pass
+            if inspector_settings.INSPECTOR_RAISE_ERRORS:
+                raise
+            logger.warning("inspector: flush_events failed", exc_info=True)
         try:
             from django_inspector.watchers.sql import clear_query_log
             clear_query_log()
         except Exception:
-            pass
+            if inspector_settings.INSPECTOR_RAISE_ERRORS:
+                raise
+            logger.debug("inspector: clear_query_log failed", exc_info=True)

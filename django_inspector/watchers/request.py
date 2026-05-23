@@ -115,6 +115,7 @@ def _safe_body(request, max_size: int) -> str:
             body = str(body)[:max_size]
         return body
     except Exception:
+        logger.debug("inspector: could not read request body", exc_info=True)
         return ""
 
 
@@ -130,6 +131,7 @@ def _safe_response_body(response, max_size: int) -> str:
             content = str(content)[:max_size]
         return content
     except Exception:
+        logger.debug("inspector: could not read response body", exc_info=True)
         return ""
 
 

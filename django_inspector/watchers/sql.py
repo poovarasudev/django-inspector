@@ -156,7 +156,9 @@ def _query_wrapper(execute, sql, params, many, context):
                     inst.record("sql.query", metadata)
                     break
         except Exception:
-            pass
+            if inspector_settings.INSPECTOR_RAISE_ERRORS:
+                raise
+            logger.warning("inspector: error recording sql.query event", exc_info=True)
 
     return result
 
