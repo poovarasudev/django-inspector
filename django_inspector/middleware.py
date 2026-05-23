@@ -59,8 +59,10 @@ class InspectorMiddleware:
                 from django_inspector.storage.flush import clear_buffer
                 clear_buffer()
         finally:
-            self._flush()
-            clear_trace_id(token)
+            try:
+                self._flush()
+            finally:
+                clear_trace_id(token)
 
         return response
 
