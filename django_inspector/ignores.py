@@ -27,9 +27,26 @@ def _compiled_path_patterns():
 
 
 @lru_cache(maxsize=1)
-def _compiled_exception_names():
+def _compiled_exception_classes():
+    """
+    Return a frozenset of resolved exception classes from IGNORE_EXCEPTIONS.
+
+    Uses import_string so public aliases like 'django.http.Http404' work even
+    when the class lives in 'django.http.response'. Entries that fail to
+    import are logged and skipped.
+    """
+    from django.utils.module_loading import import_string
     from django_inspector.conf import inspector_settings
-    return frozenset(inspector_settings.IGNORE_EXCEPTIONS or [])
+
+    dotted_names = inspector_settings.IGNORE_EXCEPTIONS or []
+    classes = set()
+    for name in dotted_names:
+        try:
+            cls = import_string(name)
+            classes.add(cls)
+        except ImportError:
+            logger.warning("inspector: IGNORE_EXCEPTIONS entry %r could not be imported", name)
+    return frozenset(classes)
 
 
 def should_ignore_path(path: str) -> bool:
@@ -44,9 +61,7 @@ def should_ignore_path(path: str) -> bool:
 def should_ignore_exception(exc: BaseException) -> bool:
     """Return True if the exception class matches any entry in IGNORE_EXCEPTIONS (IGN-02, IGN-03)."""
     try:
-        exc_class = type(exc)
-        fqn = f"{exc_class.__module__}.{exc_class.__qualname__}"
-        return fqn in _compiled_exception_names()
+        return type(exc) in _compiled_exception_classes()
     except Exception:
         logger.debug("inspector: error evaluating IGNORE_EXCEPTIONS", exc_info=True)
         return False
@@ -55,4 +70,4 @@ def should_ignore_exception(exc: BaseException) -> bool:
 def invalidate_ignore_caches() -> None:
     """Clear compiled pattern caches. Call after override_settings in tests."""
     _get_path_patterns_key.cache_clear()
-    _compiled_exception_names.cache_clear()
+    _compiled_exception_classes.cache_clear()
