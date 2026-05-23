@@ -10,6 +10,9 @@ DEFAULTS = {
     "DASHBOARD_URL_PREFIX": "inspector/",
     "SQL_SLOW_THRESHOLD_MS": 100,
     "MAX_BODY_SIZE": 8192,
+    "SENSITIVE_KEYS": [],               # extra keys to redact (merged additive with built-in defaults in masking.py)
+    "SAMPLING_RATE": 1.0,               # fraction of successful requests to capture (0.0–1.0); errors always captured
+    "SLOW_REQUEST_THRESHOLD_MS": 1000,  # requests at or above this latency are always captured regardless of rate
 }
 
 
