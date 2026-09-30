@@ -281,3 +281,38 @@ class TestEndpointStats(TestCase):
             issues.ISSUES_SCAN_LIMIT = original
         assert capped is True
         assert sum(r["count"] for r in stats) == 3
+
+
+class TestBoundedScan(TestCase):
+    """_bounded() cuts on the (event_type, timestamp) index, with id breaking ties."""
+
+    def _rows(self, timestamps):
+        for n, ts in enumerate(timestamps):
+            Event.objects.create(trace_id=_tid(n), event_type="request.completed", timestamp=ts)
+
+    def test_keeps_exactly_the_newest_rows_by_timestamp(self):
+        now = timezone.now()
+        # Inserted newest first, so id order disagrees with time order.
+        self._rows([now - datetime.timedelta(minutes=m) for m in range(5)])
+        original = issues.ISSUES_SCAN_LIMIT
+        issues.ISSUES_SCAN_LIMIT = 3
+        try:
+            bounded, capped = issues._bounded(Event.objects.filter(event_type="request.completed"))
+            kept = sorted(bounded.values_list("timestamp", flat=True), reverse=True)
+        finally:
+            issues.ISSUES_SCAN_LIMIT = original
+        assert capped
+        assert kept == [now - datetime.timedelta(minutes=m) for m in range(3)]
+
+    def test_ties_on_timestamp_still_keep_exactly_the_limit(self):
+        now = timezone.now()
+        self._rows([now] * 5)
+        original = issues.ISSUES_SCAN_LIMIT
+        issues.ISSUES_SCAN_LIMIT = 3
+        try:
+            bounded, capped = issues._bounded(Event.objects.filter(event_type="request.completed"))
+            count = bounded.count()
+        finally:
+            issues.ISSUES_SCAN_LIMIT = original
+        assert capped
+        assert count == 3

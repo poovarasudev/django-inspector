@@ -30,10 +30,16 @@ def _bounded(qs):
     whether that cut the result short. One indexed query, flat cost however
     big the table is.
     """
-    cutoff = list(qs.order_by("-id").values_list("id", flat=True)[ISSUES_SCAN_LIMIT - 1:ISSUES_SCAN_LIMIT])
+    # Ordered by timestamp so the (event_type, -timestamp) index serves it, and
+    # "newest" means newest by capture time (ids follow flush order instead);
+    # id only breaks ties so the bound stays exact.
+    cutoff = list(
+        qs.order_by("-timestamp", "-id").values_list("timestamp", "id")[ISSUES_SCAN_LIMIT - 1:ISSUES_SCAN_LIMIT]
+    )
     if not cutoff:
         return qs, False
-    return qs.filter(id__gte=cutoff[0]), True
+    timestamp, event_id = cutoff[0]
+    return qs.filter(Q(timestamp__gt=timestamp) | Q(timestamp=timestamp, id__gte=event_id)), True
 
 
 def _percentile(sorted_values, pct):
