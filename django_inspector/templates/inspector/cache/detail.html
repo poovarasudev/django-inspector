@@ -1,0 +1,80 @@
+{% extends "inspector/base.html" %}
+{% block title %}Cache Operation — Inspector{% endblock %}
+{% block content %}
+<a href="{% url 'inspector:cache-list' %}" class="inspector-back-link">&#8592; Back to Cache</a>
+
+<div class="inspector-page-header">
+    <h1>cache.{{ event.metadata.operation }}</h1>
+</div>
+
+{% if event.metadata.error %}
+<div class="inspector-card">
+    <h3 style="margin-bottom: 12px; font-size: 14px; color: var(--ins-text-secondary); text-transform: uppercase;">Error</h3>
+    <pre class="inspector-code">{{ event.metadata.error }}</pre>
+</div>
+{% endif %}
+
+<div class="inspector-card">
+    <table class="inspector-detail-table">
+        {% if event.metadata.key_count %}
+        <tr>
+            <th>Keys ({{ event.metadata.key_count }})</th>
+            <td>
+                <pre class="inspector-code" style="margin: 0;">{% for k in event.metadata.keys %}{{ k }}
+{% endfor %}</pre>
+                {% if event.metadata.key_count > event.metadata.keys|length %}
+                <div style="font-size: 12px; color: var(--ins-text-secondary);">Showing the first {{ event.metadata.keys|length }}.</div>
+                {% endif %}
+            </td>
+        </tr>
+        {% else %}
+        <tr><th>Key</th><td class="inspector-code-inline">{{ event.metadata.key }}</td></tr>
+        {% endif %}
+        <tr>
+            <th>Result</th>
+            <td>
+                {% if event.metadata.hit is True %}<span class="inspector-indicator inspector-indicator--hit">HIT</span>
+                {% elif event.metadata.hit is False %}<span class="inspector-indicator inspector-indicator--miss">MISS</span>
+                {% elif event.metadata.hit_count is not None %}{{ event.metadata.hit_count }} / {{ event.metadata.key_count }} hit
+                {% else %}-{% endif %}
+            </td>
+        </tr>
+        {% if "ttl_seconds" in event.metadata %}
+        <tr>
+            <th>TTL</th>
+            <td>{% if event.metadata.ttl_seconds is None %}Never expires{% else %}{{ event.metadata.ttl_seconds }}s{% endif %}</td>
+        </tr>
+        {% endif %}
+        {% if "value_type" in event.metadata %}
+        <tr>
+            <th>Value</th>
+            <td>{{ event.metadata.value_type }}{% if event.metadata.value_size_bytes is not None %}, {{ event.metadata.value_size_bytes }} bytes{% endif %}</td>
+        </tr>
+        {% endif %}
+        {% if "stored" in event.metadata %}
+        <tr><th>Stored</th><td>{{ event.metadata.stored|yesno:"yes,no" }}</td></tr>
+        {% endif %}
+        {% if "deleted" in event.metadata %}
+        <tr><th>Deleted</th><td>{{ event.metadata.deleted|yesno:"yes,no" }}</td></tr>
+        {% endif %}
+        {% if event.metadata.failed_keys %}
+        <tr><th>Failed keys</th><td>{{ event.metadata.failed_keys|join:", " }}</td></tr>
+        {% endif %}
+        <tr><th>Cache</th><td>{{ event.metadata.alias|default:"-" }}</td></tr>
+        <tr><th>Backend</th><td class="inspector-code-inline">{{ event.metadata.backend }}</td></tr>
+        <tr><th>Duration</th><td>{{ event.metadata.duration_ms }}ms</td></tr>
+        <tr><th>Origin File</th><td>{{ event.metadata.origin_file|default:"-" }}</td></tr>
+        <tr><th>Origin Line</th><td>{{ event.metadata.origin_line|default:"-" }}</td></tr>
+        <tr><th>Origin Function</th><td>{{ event.metadata.origin_function|default:"-" }}</td></tr>
+    </table>
+</div>
+
+{% if parent_request %}
+<div class="inspector-card">
+    <a href="{% url 'inspector:request-detail' parent_request.pk %}" style="color: var(--ins-accent); text-decoration: none; font-weight: 500;">
+        View Request &#8594; {{ parent_request.metadata.method }} {{ parent_request.metadata.path }}
+    </a>
+</div>
+{% endif %}
+
+{% endblock %}

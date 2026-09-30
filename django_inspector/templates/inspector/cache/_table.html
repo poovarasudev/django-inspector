@@ -1,0 +1,34 @@
+<table class="inspector-table">
+    <thead>
+        <tr>
+            <th>Operation</th>
+            <th>Key</th>
+            <th>Result</th>
+            <th>Cache</th>
+            <th>Duration</th>
+            <th>Time</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for event in page.object_list %}
+        <tr>
+            <td><a href="{% url 'inspector:cache-detail' event.pk %}">{{ event.metadata.operation }}</a></td>
+            <td class="inspector-code-inline">{% if event.metadata.key_count %}{{ event.metadata.key_count }} keys{% else %}{{ event.metadata.key|truncatechars:80 }}{% endif %}</td>
+            <td>
+                {% if event.metadata.hit is True %}<span class="inspector-indicator inspector-indicator--hit">HIT</span>
+                {% elif event.metadata.hit is False %}<span class="inspector-indicator inspector-indicator--miss">MISS</span>
+                {% elif event.metadata.hit_count is not None %}{{ event.metadata.hit_count }} / {{ event.metadata.key_count }} hit
+                {% endif %}
+                {% if event.metadata.error %}<span class="inspector-indicator inspector-indicator--slow">ERROR</span>{% endif %}
+            </td>
+            <td>{{ event.metadata.alias|default:"-" }}</td>
+            <td>{{ event.metadata.duration_ms }}ms</td>
+            <td>{{ event.timestamp|timesince }} ago</td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="6" style="text-align: center; padding: 40px; color: var(--ins-text-secondary);">No cache operations found.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

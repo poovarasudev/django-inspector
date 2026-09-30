@@ -29,3 +29,4 @@ TEMPLATES = [
         "OPTIONS": {"context_processors": ["django.template.context_processors.request"]},
     }
 ]
+ROOT_URLCONF = "tests.urls"

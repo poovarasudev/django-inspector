@@ -1,0 +1,50 @@
+{% extends "inspector/base.html" %}
+{% block title %}Cache — Inspector{% endblock %}
+{% block content %}
+<div class="inspector-page-header">
+    <h1>Cache</h1>
+</div>
+
+<form class="inspector-filter-bar"
+      hx-get="{% url 'inspector:cache-list' %}"
+      hx-target="#results-table"
+      hx-push-url="true"
+      hx-trigger="change, keyup changed delay:300ms from:input[name=key]">
+    <label>
+        Operation
+        <select name="operation">
+            <option value="">All</option>
+            {% for op in operations %}
+            <option value="{{ op }}" {% if filters.operation == op %}selected{% endif %}>{{ op }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>
+        Cache
+        <select name="alias">
+            <option value="">All</option>
+            {% for a in aliases %}
+            <option value="{{ a }}" {% if filters.alias == a %}selected{% endif %}>{{ a }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>
+        Result
+        <select name="result">
+            <option value="">All</option>
+            <option value="hit" {% if filters.result == "hit" %}selected{% endif %}>Hit</option>
+            <option value="miss" {% if filters.result == "miss" %}selected{% endif %}>Miss</option>
+        </select>
+    </label>
+    <label>
+        Key
+        <input type="search" name="key" value="{{ filters.key|default:'' }}" placeholder="contains…">
+    </label>
+</form>
+
+<div id="results-table">
+    {% include "inspector/cache/_table.html" %}
+</div>
+
+{% include "inspector/_pagination.html" %}
+{% endblock %}

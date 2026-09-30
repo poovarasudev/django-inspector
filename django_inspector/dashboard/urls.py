@@ -13,4 +13,6 @@ urlpatterns = [
     path("queries/<int:pk>/", inspector_required(views.query_detail), name="query-detail"),
     path("exceptions/", inspector_required(views.exceptions_list), name="exceptions-list"),
     path("exceptions/<int:pk>/", inspector_required(views.exception_detail), name="exception-detail"),
+    path("cache/", inspector_required(views.cache_list), name="cache-list"),
+    path("cache/<int:pk>/", inspector_required(views.cache_detail), name="cache-detail"),
 ]

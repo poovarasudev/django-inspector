@@ -1,7 +1,11 @@
+from django.conf import settings
 from django.shortcuts import render, get_object_or_404
 from django.core.paginator import Paginator
 
 from django_inspector.storage.models import Event
+from django_inspector.watchers.cache import CACHE_EVENT_TYPES
+
+CACHE_OPERATIONS = [event_type.split(".", 1)[1] for event_type in CACHE_EVENT_TYPES]
 
 
 def live_feed(request):
@@ -179,3 +183,45 @@ def exception_detail(request, pk):
     ).first()
     context = {"event": event, "parent_request": parent_request}
     return render(request, "inspector/exceptions/detail.html", context)
+
+
+def cache_list(request):
+    qs = Event.objects.filter(event_type__in=CACHE_EVENT_TYPES).order_by("-timestamp")
+
+    operation = request.GET.get("operation", "")
+    alias = request.GET.get("alias", "")
+    result = request.GET.get("result", "")
+    key = request.GET.get("key", "")
+
+    if operation:
+        qs = qs.filter(metadata__operation=operation)
+    if alias:
+        qs = qs.filter(metadata__alias=alias)
+    if result == "hit":
+        qs = qs.filter(metadata__hit=True)
+    elif result == "miss":
+        qs = qs.filter(metadata__hit=False)
+    if key:
+        qs = qs.filter(metadata__key__icontains=key)
+
+    paginator = Paginator(qs, 25)
+    page = paginator.get_page(request.GET.get("page", 1))
+    context = {
+        "page": page,
+        "filters": request.GET,
+        "operations": CACHE_OPERATIONS,
+        "aliases": list(settings.CACHES),
+    }
+
+    if request.headers.get("HX-Request"):
+        return render(request, "inspector/cache/_table.html", context)
+    return render(request, "inspector/cache/list.html", context)
+
+
+def cache_detail(request, pk):
+    event = get_object_or_404(Event, pk=pk, event_type__in=CACHE_EVENT_TYPES)
+    parent_request = Event.objects.filter(
+        trace_id=event.trace_id, event_type="request.completed"
+    ).first()
+    context = {"event": event, "parent_request": parent_request}
+    return render(request, "inspector/cache/detail.html", context)
