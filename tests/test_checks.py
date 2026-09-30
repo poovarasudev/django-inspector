@@ -40,6 +40,8 @@ class TestSettingsCheck:
         ("RETENTION_HOURS", 0),
         ("DASHBOARD_URL_PREFIX", None),
         ("WATCHERS", ["sql"]),
+        ("TRACE_HEADER", "always"),
+        ("TRACE_HEADER", 1),
     ])
     def test_invalid_values_are_errors(self, key, value):
         with override_settings(DJANGO_INSPECTOR={key: value}):
@@ -53,6 +55,9 @@ class TestSettingsCheck:
         ("WATCHERS", {"cache": True}),
         ("RETENTION_HOURS", None),
         ("RETENTION_HOURS", 48),
+        ("TRACE_HEADER", "debug"),
+        ("TRACE_HEADER", True),
+        ("TRACE_HEADER", False),
     ])
     def test_valid_values_pass(self, key, value):
         with override_settings(DJANGO_INSPECTOR={key: value}):

@@ -103,6 +103,10 @@ def _check_values(user):
         perm = user["INSPECTOR_DASHBOARD_PERMISSION"]
         if perm is not None and not isinstance(perm, str):
             errors.append(_invalid("INSPECTOR_DASHBOARD_PERMISSION", "None or a dotted path", perm))
+    if "TRACE_HEADER" in user:
+        value = user["TRACE_HEADER"]
+        if not (isinstance(value, bool) or value == "debug"):
+            errors.append(_invalid("TRACE_HEADER", 'True, False or "debug"', value))
     if "LOG_LEVEL_THRESHOLD" in user:
         level = user["LOG_LEVEL_THRESHOLD"]
         valid = _is_int(level) or (

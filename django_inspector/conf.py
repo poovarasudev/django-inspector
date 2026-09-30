@@ -39,6 +39,7 @@ DEFAULTS: Dict[str, Any] = {
     ],
     "LOG_LEVEL_THRESHOLD": "WARNING",   # level name or number; the log watcher ignores records below it
     "INSPECTOR_RAISE_ERRORS": False,    # if True, inspector-internal errors propagate (useful in dev/tests)
+    "TRACE_HEADER": "debug",            # X-Inspector-Trace on kept traces: True, False, or "debug" (only when DEBUG)
 }
 
 
