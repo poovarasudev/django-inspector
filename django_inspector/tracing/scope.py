@@ -10,6 +10,8 @@ import logging
 import time
 from typing import Optional
 
+from django.utils import timezone
+
 from django_inspector.conf import inspector_settings
 from django_inspector.tracing.context import (
     clear_trace_id,
@@ -33,6 +35,9 @@ class TraceScope:
         self.trace_id = trace_id
         self.pick = pick
         self.started = time.monotonic()
+        # Wall-clock start: anchor events are stamped with it, so they come
+        # first in their trace's timeline.
+        self.started_at = timezone.now()
         self._trace_token: Optional[object] = None
         self._buffer_token: Optional[object] = None
         self._query_log_token: Optional[object] = None

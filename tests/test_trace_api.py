@@ -53,6 +53,18 @@ class TestEnterReturnsTraceId(TestCase):
         assert trace_id is not None
 
 
+class TestAnchorTimestamp(TestCase):
+    def test_anchor_is_stamped_with_the_start_and_precedes_the_block_events(self):
+        # Like request.completed: the anchor is the trace's time origin, so
+        # the timeline lists it first and waterfall offsets start at zero.
+        with trace("ordered") as trace_id:
+            logging.getLogger("tests.trace_api").warning("inside the block")
+        events = list(Event.objects.filter(trace_id=trace_id).order_by("timestamp", "id"))
+        assert events[0].event_type == "trace.completed"
+        log_event = next(e for e in events if e.event_type == "log.record")
+        assert events[0].timestamp <= log_event.timestamp
+
+
 class TestOneKeptTraceWithAnchor(TestCase):
     def test_with_form(self):
         with trace("nightly-report") as trace_id:

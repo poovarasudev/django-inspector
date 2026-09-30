@@ -62,7 +62,7 @@ def _capture_exception(exc_info):
         watcher.capture(exc_info)
 
 
-def _record_anchor(trace_id, name, duration_ms, failed, error_type):
+def _record_anchor(trace_id, name, duration_ms, failed, error_type, timestamp):
     from django_inspector.masking import mask_metadata
     from django_inspector.storage.flush import buffer_event
 
@@ -72,7 +72,12 @@ def _record_anchor(trace_id, name, duration_ms, failed, error_type):
         "status": "error" if failed else "ok",
         "error_type": error_type,
     }
-    buffer_event(trace_id=trace_id, event_type="trace.completed", metadata=mask_metadata(metadata))
+    # Stamped with the trace's start, like request.completed, so it precedes
+    # the events recorded inside the block.
+    buffer_event(
+        trace_id=trace_id, event_type="trace.completed",
+        metadata=mask_metadata(metadata), timestamp=timestamp,
+    )
 
 
 class _Run:
@@ -116,7 +121,9 @@ class _Run:
 
         duration_ms = scope.elapsed_ms()
         _guarded(
-            lambda: _record_anchor(scope.trace_id, self.name, duration_ms, failed, error_type),
+            lambda: _record_anchor(
+                scope.trace_id, self.name, duration_ms, failed, error_type, scope.started_at
+            ),
             "trace() failed to record the trace.completed anchor",
             protect=protect,
         )
