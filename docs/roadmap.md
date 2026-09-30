@@ -176,6 +176,7 @@ Carried over from the GSD state file on 2026-09-30:
 - ~~No README~~ — resolved in Phase 7 (`README.md`, `CHANGELOG.md`).
 - ~~No CI~~ — resolved in Phase 7 (`.github/workflows/ci.yml`).
 - ~~MASK-05 fail-open~~ — resolved: masking fails closed (placeholder event), and card matching now requires Luhn (MASK-04).
+- ~~Pre-release review findings~~ — resolved on `fix/masking-fail-closed-luhn` (see `CHANGELOG.md` 0.2.0 "Security"): unmasked bodies, URLs and exception locals; the `X-Forwarded-For` allowlist bypass; quadratic SQL detection; flush-time timestamps; no config validation; no retention setting; third-party htmx; CI without lint, types, coverage, PostgreSQL or Django 6.
 
 ## Deferred Items
 
@@ -183,10 +184,11 @@ Carried over from the GSD state file on 2026-09-30:
 |----------|------|--------|-------------|
 | Storage | `AbstractStorageBackend` | Deferred to first non-ORM backend | v1.1 init |
 | Persistence | Async write offload (thread pool / Celery) | Deferred to v1.2 | v1.1 init |
-| Schema | Denormalized event columns (`method`, `status_code`) | Deferred to v1.2 | v1.1 init |
+| Schema | Denormalized event columns (`method`, `status_code`, `path`); 0.2.0 added an `(event_type, -timestamp)` index and capped list counts | Deferred to v1.2 | v1.1 init |
+| Masking | Mask SQL parameters by column name (0.2.0 adds `SQL_CAPTURE_PARAMS` to turn them off) | Deferred | Review |
+| Support | Drop Python 3.8/3.9 and Django < 4.2 (all past end of life) | Planned for 0.3.0 | Review |
 | Plugins | `setuptools` entry_points for external watchers | Deferred | v1.1 init |
-| Dashboard | Search, comparison, JSON/CSV export | Deferred | v1.1 init |
-| Schema | Capture-time event timestamps (`auto_now_add` is set at flush, so waterfall offsets are meaningless; needs a migration) | Deferred | Phase 5 |
+| Dashboard | Comparison, CSV export (trace-id search and JSON export shipped in 0.2.0) | Deferred | v1.1 init |
 | Watchers | Jinja2 template renders | Deferred | Phase 5 |
 | Watchers | Watching all signals (only `SIGNAL_WATCH_LIST` is supported) | Deferred | Phase 6 |
 | Watchers | Cache `has_key` / `incr` / `decr` / `touch`; value size for non-str/bytes values | Deferred | Phase 5 |
