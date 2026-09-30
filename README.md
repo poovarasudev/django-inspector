@@ -87,6 +87,57 @@ Two watchers have scope limits worth knowing:
 - **Log watcher.** It adds one handler to the root logger and never changes your logging config. So it only sees records that reach the root logger: loggers with `propagate=False` aren't captured, and nor are records below a logger's own level.
 - **Signal watcher.** It only watches the signals you list. By default that's the five model signals: `pre_save`, `post_save`, `pre_delete`, `post_delete` and `m2m_changed`.
 
+## Tracing code outside requests
+
+Every request already gets its own trace, but background jobs, management commands and cron scripts don't. `trace()` starts one anywhere:
+
+```python
+from django_inspector import trace
+
+with trace("nightly-report"):
+    ...
+
+async with trace("sync-prices"):
+    ...
+
+@trace("send-digest")
+def send_digest():
+    ...
+
+@trace("refresh-cache")
+async def refresh_cache():
+    ...
+```
+
+Whatever runs inside the block — SQL queries, log records at `LOG_LEVEL_THRESHOLD`+, a raised exception — is captured under one trace id, exactly like a request. A `trace()` opened while a trace is already active (nested calls, or one started inside a request) joins the active one instead of starting a new trace: no extra flush, no extra anchor event, and `trace()` (as a context manager) returns the outer trace id.
+
+A traced block is sampled the same way a request is: `SAMPLING_RATE` decides successful runs, and a run that raised or took at least `SLOW_REQUEST_THRESHOLD_MS` is always kept. An exception is recorded (type, message, stack with locals, chained causes — the same as an unhandled request exception) and then re-raised unchanged: `trace()` never hides or replaces your exception, even if something inside the inspector itself fails while finishing up.
+
+**Async code.** Use `async with trace(...):` or `@trace(...)` on an `async def` function inside async code — not plain `with trace(...):`, which does its database write synchronously and will raise Django's `SynchronousOnlyOperation` there (caught and logged like any other inspector failure, so your code still runs, but nothing is recorded).
+
+### Finding your way back to a trace
+
+A request's response can carry its trace id in a header, and every log record can carry the current trace id too:
+
+- **`X-Inspector-Trace` header.** Set via `TRACE_HEADER`: `"debug"` (default, only when `settings.DEBUG` is on), `True` (always) or `False` (never). Only added to a *kept* trace — an unkept one has nothing to show at its id.
+- **Logging filter.** `django_inspector.tracing.TraceIdFilter` sets `record.inspector_trace_id` (the current trace id, or `"-"` outside a trace) on every record it sees:
+
+  ```python
+  LOGGING = {
+      "version": 1,
+      "filters": {"trace_id": {"()": "django_inspector.tracing.TraceIdFilter"}},
+      "formatters": {"plain": {"format": "%(levelname)s [%(inspector_trace_id)s] %(message)s"}},
+      "handlers": {
+          "console": {
+              "class": "logging.StreamHandler",
+              "filters": ["trace_id"],
+              "formatter": "plain",
+          },
+      },
+      "root": {"handlers": ["console"], "level": "INFO"},
+  }
+  ```
+
 ## Configuration
 
 Every setting goes in one dict, and every key is optional:
@@ -113,7 +164,7 @@ DJANGO_INSPECTOR = {
 | `SENSITIVE_KEYS` | `[]` | Extra keys to redact, added to the built-in list (password, token, secret, api_key, authorization, cookie, csrf, session, …). |
 | `SAMPLING_RATE` | `1.0` | Fraction of successful requests to keep (0.0–1.0). 5xx responses are always kept. |
 | `EARLY_SAMPLING` | `False` | Decide sampling when a request starts instead of when it ends. Requests that aren't picked then skip SQL, cache, template, signal and log capture entirely (much cheaper), but a failed or slow one is still kept with its request and exception events. |
-| `SLOW_REQUEST_THRESHOLD_MS` | `1000` | Requests at or above this latency are always kept, whatever the sampling rate. |
+| `SLOW_REQUEST_THRESHOLD_MS` | `1000` | Any trace — a request or a `trace()` run — at or above this duration is always kept, whatever the sampling rate. |
 | `INSPECTOR_DASHBOARD_PERMISSION` | `None` | Dotted path to a `(request) -> bool` callable. `None` means the user must be `is_staff`. |
 | `INSPECTOR_DASHBOARD_IP_ALLOWLIST` | `[]` | IP addresses or CIDR ranges allowed to see the dashboard. Empty means no IP restriction. |
 | `TRUSTED_PROXY_COUNT` | `0` | Number of reverse proxies in front of Django. `X-Forwarded-For` is trusted for this many hops only; `0` uses `REMOTE_ADDR`. Used for the recorded client IP and the IP allowlist. |
@@ -122,6 +173,7 @@ DJANGO_INSPECTOR = {
 | `SIGNAL_WATCH_LIST` | the five model signals | Dotted paths of the signals the signal watcher captures. |
 | `LOG_LEVEL_THRESHOLD` | `"WARNING"` | Minimum level the log watcher records: a level name or number. |
 | `INSPECTOR_RAISE_ERRORS` | `False` | Re-raise the inspector's own internal errors instead of logging them. Useful in development and tests. |
+| `TRACE_HEADER` | `"debug"` | `X-Inspector-Trace` on a kept trace's response: `"debug"` sends it only when `settings.DEBUG` is on, `True` always sends it, `False` never does. |
 
 ### Configuration checks
 
@@ -147,6 +199,7 @@ When both are set, the request must pass both. When `DEBUG = False` and neither 
 The dashboard has these pages:
 - **Live Feed**
 - **Requests**: each request has a timeline, tabs and a waterfall view of everything in its trace.
+- **Traces**: `trace()` runs that aren't requests — name, status, duration — each with a timeline and waterfall on its own `/trace/<id>/` page. A request's trace id also resolves there and redirects to its request page.
 - **Queries**, **Cache**, **Templates**, **Logs**, **Signals** and **Exceptions**: each page has filters.
 
 ### Pinning a trace

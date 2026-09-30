@@ -18,10 +18,16 @@ The "v1.2 Phase 8" milestone: real `Event` columns for the fields later phases f
 - **Pin a trace** from its request detail page: a "Pin trace"/"Unpin trace" button and a "Pinned" badge, also shown in the requests list. `POST trace/<trace_id>/pin/` updates every event of the trace, protected by `csrf_protect` (so CSRF is enforced even without `CsrfViewMiddleware`) and `require_POST`. (SCHEMA-04)
 - **Read-only Django admin** for `Event`: list, filter by type and pinned, search by trace id and fingerprint; add, change and delete are all denied. Only loaded when the host has `django.contrib.admin` installed. (SCHEMA-05)
 - The requests-list `method`, status-class and `path` filters now query the real columns instead of JSON metadata lookups. (SCHEMA-06)
+- **A public `trace()`**, exported as `django_inspector.trace`: starts a trace from any code as `with`, `async with`, or a decorator on a sync or async function. Records SQL, log and exception events into one trace, the same as a request. A `trace()` opened while a trace is already active joins it instead of starting a new one — no extra flush, no extra anchor event. Sampled like a request: kept when it fails or runs at or above `SLOW_REQUEST_THRESHOLD_MS`, otherwise at `SAMPLING_RATE`. Its exception is recorded (through the exception watcher's new public `capture()`) and then re-raised unchanged; an inspector failure while finishing up is logged and swallowed (or raised under `INSPECTOR_RAISE_ERRORS`) and never replaces the user's exception. Importing `django_inspector` no longer imports the storage models — every storage/watcher import in `trace()` is deferred to call time. (TRACE-01, TRACE-03, TRACE-04)
+- `InspectorMiddleware` is rebuilt on the same `TraceScope` lifecycle `trace()` uses (`tracing/scope.py`), with no behaviour change: the existing middleware, sampling, ASGI and async-isolation test suites pass unchanged. `sampling.should_keep(failed, duration_ms, early_pick)` is the sampling decision itself, shared by requests and `trace()`; `compute_sampling_decision()` is now a thin wrapper over it. (TRACE-02)
+- **`X-Inspector-Trace` response header** on a kept trace, controlled by the new `TRACE_HEADER` setting (`"debug"` default: only when `DEBUG` is on; `True` always; `False` never). An unkept trace never gets it. (TRACE-05)
+- **`django_inspector.tracing.TraceIdFilter`**, a `logging.Filter` that sets `record.inspector_trace_id` to the current trace id (or `"-"` outside one), for wiring trace ids into your own log format. (TRACE-06)
+- **Traces page**: `/trace/<id>/` now renders any trace, not only a request's — a request trace still redirects to its request page, and a `trace()` run gets its own page (timeline, waterfall, pin button, JSON export) anchored on its `trace.completed` event. `/traces/` lists non-request traces with name/status/date filters. (CMD-04)
 
 ### Changed
 
 - `watchers.utils._is_library_file` is now the public `is_library_file` (the old name is kept as an alias). `watchers.sql._normalize_sql` now re-exports `storage.columns.normalize_sql`.
+- `SLOW_REQUEST_THRESHOLD_MS` now applies to every trace, not only requests.
 
 ## [0.2.0] - Unreleased
 

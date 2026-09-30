@@ -187,11 +187,11 @@ Work items:
   7. `/trace/<id>/` renders a `trace()` trace, request traces still open the request page, and a Traces page lists non-request traces.
 
 Work items:
-- [ ] `trace()` context manager / decorator and lifecycle extraction
-- [ ] Middleware rebuilt on `trace()`
-- [ ] `X-Inspector-Trace` header
-- [ ] Trace-id logging filter
-- [ ] General trace page and Traces list (CMD-04)
+- [x] `trace()` context manager / decorator and lifecycle extraction
+- [x] Middleware rebuilt on `trace()`
+- [x] `X-Inspector-Trace` header
+- [x] Trace-id logging filter
+- [x] General trace page and Traces list (CMD-04)
 
 ---
 
@@ -306,7 +306,7 @@ Work items:
 | 6. Signal & Logging Watchers | v1.1 | 1/1 | Complete | 2026-09-30 |
 | 7. ASGI Verification & Release Prep | v1.1 | 1/1 | Complete | 2026-09-30 |
 | 8. Event Schema v2 | v1.2 | 1/1 | Complete | 2026-09-30 |
-| 9. Trace API | v1.2 | 0/1 | Planned | - |
+| 9. Trace API | v1.2 | 1/1 | Complete | 2026-09-30 |
 | 10. Management Command Watcher | v1.2 | 0/1 | Planned | - |
 | 11. Query Guard for Tests | v1.2 | 0/1 | Planned | - |
 | 12. Issues Page & CSV Export | v1.2 | 0/1 | Planned | - |

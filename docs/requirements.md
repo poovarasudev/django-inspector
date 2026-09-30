@@ -102,20 +102,20 @@ From the product discovery in `docs/discovery/2026-09-30-next-features.md`. Phas
 
 ### Trace API — Phase 9
 
-- [ ] **TRACE-01**: A public `django_inspector.trace(name, ...)` works as a context manager and a decorator, on sync and async code
-- [ ] **TRACE-02**: `trace()` owns the whole trace lifecycle (trace id, event buffer, query stats, detail flag, sampling, flush, prune, reset); `InspectorMiddleware` is rebuilt on it with no behaviour change
-- [ ] **TRACE-03**: A `trace()` opened while a trace is active joins the outer trace instead of starting a new one
-- [ ] **TRACE-04**: Traces that aren't requests are sampled like requests: failed or slow runs are always kept, others at `SAMPLING_RATE`
-- [ ] **TRACE-05**: Kept request traces carry an `X-Inspector-Trace` response header; a setting controls it and the default sends it only when `DEBUG` is on
-- [ ] **TRACE-06**: A `logging.Filter` sets `record.inspector_trace_id` so application log lines can be matched to traces
-- [ ] **TRACE-07**: Middleware overhead stays within the `scripts/benchmark.py` budget after the refactor
+- [x] **TRACE-01**: A public `django_inspector.trace(name, ...)` works as a context manager and a decorator, on sync and async code
+- [x] **TRACE-02**: `trace()` owns the whole trace lifecycle (trace id, event buffer, query stats, detail flag, sampling, flush, prune, reset); `InspectorMiddleware` is rebuilt on it with no behaviour change
+- [x] **TRACE-03**: A `trace()` opened while a trace is active joins the outer trace instead of starting a new one
+- [x] **TRACE-04**: Traces that aren't requests are sampled like requests: failed or slow runs are always kept, others at `SAMPLING_RATE`
+- [x] **TRACE-05**: Kept request traces carry an `X-Inspector-Trace` response header; a setting controls it and the default sends it only when `DEBUG` is on
+- [x] **TRACE-06**: A `logging.Filter` sets `record.inspector_trace_id` so application log lines can be matched to traces
+- [x] **TRACE-07**: Middleware overhead stays within the `scripts/benchmark.py` budget after the refactor
 
 ### Management Command Watcher (PRD §11.10) — Phase 10
 
 - [ ] **CMD-01**: Capture command name, args, options, stdout, stderr (bounded), duration, exit code
 - [ ] **CMD-02**: Commands are traced only when listed in `COMMAND_WATCH_LIST`; `runserver`, `test`, `shell`, `migrate` and `inspector_cleanup` are never traced
 - [ ] **CMD-03**: Long commands flush events in chunks and keep bounded query stats, so memory stays flat and a killed command keeps what it already recorded
-- [ ] **CMD-04**: `/trace/<id>/` shows any trace (request, command, task) instead of redirecting only to a request, plus a Traces list page — delivered in Phase 9, where non-request traces first appear
+- [x] **CMD-04**: `/trace/<id>/` shows any trace (request, command, task) instead of redirecting only to a request, plus a Traces list page — delivered in Phase 9, where non-request traces first appear
 
 ### Query Guard for Tests — Phase 11
 
@@ -213,7 +213,7 @@ Update the status when a spec for that phase ships. Specs and plans in `docs/sup
 | LOG-01..06 | Phase 6 (Signal & Logging Watchers) | Done |
 | ASYNC-03 | Phase 7 (Async / ASGI verification) | Done |
 | SCHEMA-01..06 | Phase 8 (Event Schema v2) | Done |
-| TRACE-01..07, CMD-04 | Phase 9 (Trace API) | Planned |
+| TRACE-01..07, CMD-04 | Phase 9 (Trace API) | Done |
 | CMD-01..03 | Phase 10 (Management Command Watcher) | Planned |
 | TEST-01..04 | Phase 11 (Query Guard for Tests) | Planned |
 | DASH-03, DASH-04 | Phase 12 (Issues Page & CSV Export) | Planned |
