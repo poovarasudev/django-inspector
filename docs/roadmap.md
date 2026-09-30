@@ -7,7 +7,7 @@
 ## Milestones
 
 - ✅ **v1.0 MVP** — Phases 1–3 (shipped 2026-05-03, tag `v1.0`)
-- 🚧 **v1.1 Phase-1 Completion + Production Safety** — Phases 4–7 (in progress)
+- ✅ **v1.1 Phase-1 Completion + Production Safety** — Phases 4–7 (complete 2026-09-30; releases as package version **0.2.0**, tag and PyPI publish pending)
 - 📋 **v1.2 Phase-2 PRD Watchers** — Model, Email, Management Command, Middleware (planned)
 - 📋 **v1.3 Phase-3 PRD Watchers** — Celery, Scheduler, HTTP Client, Redis (planned)
 
@@ -47,7 +47,7 @@ Plans:
 
 </details>
 
-### 🚧 v1.1 Phase-1 Completion + Production Safety (In Progress)
+### ✅ v1.1 Phase-1 Completion + Production Safety (Complete — release 0.2.0 pending tag/publish)
 
 **Milestone Goal:** Close PRD §11.4–§11.7 watchers and make `django-inspector` safe to run in production behind a load balancer with real users.
 
@@ -130,11 +130,13 @@ Work items:
   3. `README.md` exists and documents install, settings, mounting, and dashboard auth.
   4. `CHANGELOG.md` lists every v1.1 change with the requirement IDs they satisfy.
   5. `python -m build` produces clean sdist + wheel; smoke install in a fresh venv works.
-**Spec**: not started (`docs/superpowers/specs/`)
+**Spec**: [2026-09-30-asgi-release-prep-design.md](superpowers/specs/2026-09-30-asgi-release-prep-design.md) · **Plan**: [2026-09-30-asgi-release-prep.md](superpowers/plans/2026-09-30-asgi-release-prep.md)
 
 Work items:
-- [ ] ASGI end-to-end test app + async coverage for v1.1 watchers
-- [ ] Release hygiene — README, CHANGELOG, license reconciliation, build smoke test
+- [x] ASGI end-to-end test app + async coverage for v1.1 watchers (and natively async-capable middleware)
+- [x] Release hygiene — README, CHANGELOG, license reconciled to MIT, version 0.2.0, build smoke test
+- [x] Fixed release blockers found on the way: Python 3.8/3.9 import crash; templates missing from the wheel
+- [x] CI — GitHub Actions test matrix (Python 3.8–3.13 × Django 4.2/5.2) + distribution check
 
 ---
 
@@ -160,7 +162,7 @@ Phases not yet broken down.
 | 4. Safety & Hardening | v1.1 | 3/3 | Complete | 2026-05-23 |
 | 5. Cache & Template Watchers | v1.1 | 1/1 | Complete | 2026-09-30 |
 | 6. Signal & Logging Watchers | v1.1 | 1/1 | Complete | 2026-09-30 |
-| 7. ASGI Verification & Release Prep | v1.1 | — | Not started (next) | - |
+| 7. ASGI Verification & Release Prep | v1.1 | 1/1 | Complete | 2026-09-30 |
 
 ## How work proceeds
 
@@ -170,9 +172,10 @@ Each phase is worked with the Superpowers flow: brainstorm → spec in `docs/sup
 
 Carried over from the GSD state file on 2026-09-30:
 
-- **License inconsistency** (CONCERNS C-11): `pyproject.toml` says MIT, `LICENSE` is Apache-2.0. Reconcile in Phase 7 at the latest.
-- **No README**: `pyproject.toml` references one. Address in Phase 7.
-- **No CI**: nothing runs tests on push. Not blocking v1.1, but add before tagging.
+- ~~License inconsistency~~ — resolved in Phase 7: MIT everywhere.
+- ~~No README~~ — resolved in Phase 7 (`README.md`, `CHANGELOG.md`).
+- ~~No CI~~ — resolved in Phase 7 (`.github/workflows/ci.yml`).
+- **MASK-05 fail-open**: if masking raises, `BaseWatcher.record` stores the event unmasked. Fix before relying on masking for compliance.
 
 ## Deferred Items
 

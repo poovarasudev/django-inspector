@@ -74,15 +74,14 @@ Requirements for the v1.1 milestone: close PRD Phase 1 watchers (Cache, Template
 
 - [x] **ASYNC-01**: SQL query log uses `ContextVar[list]` instead of `threading.local()` — verified by a test that runs two `async def` views concurrently on one thread and asserts logs don't cross
 - [x] **ASYNC-02**: Event buffer uses `ContextVar[list]` instead of `threading.local()` — same concurrency test
-- [ ] **ASYNC-03**: All v1.1 watchers (Cache, Template, Signal, Logging) are tested under ASGI middleware as well as WSGI
+- [x] **ASYNC-03**: All v1.1 watchers (Cache, Template, Signal, Logging) are tested under ASGI middleware as well as WSGI — `tests/test_asgi.py`: 5 concurrent requests through `AsyncClient`/`ASGIHandler` plus a WSGI twin; the middleware now also serves async requests natively
 
 ### Ignore Lists
 
 - [x] **IGN-01**: `IGNORE_PATHS` setting (list of regex strings, default `[]`) — matched against `request.path`; matching requests are skipped entirely (no trace id, no events)
 - [x] **IGN-02**: `IGNORE_EXCEPTIONS` setting (list of dotted-path exception class names) — matching exceptions are not recorded by the exception watcher
 - [x] **IGN-03**: Both lists are checked once per request (compiled regex cached at first use)
-- [ ] **IGN-04**: Documented examples for common ignores: `/healthz`, `/metrics`, `django.http.Http404`
-  - ⚠ Partial (Phase 4): Examples not yet documented — lands with the README in Phase 7.
+- [x] **IGN-04**: Documented examples for common ignores: `/healthz`, `/metrics`, `django.http.Http404` — in the README's Configuration section (Phase 7)
 
 ### Quiet-by-Default Logging
 
@@ -153,13 +152,13 @@ Update the status when a spec for that phase ships. Specs and plans in `docs/sup
 | MASK-01..06 | Phase 4 (Safety & Hardening) | Done — MASK-04, MASK-05 partial |
 | SAMP-01..05 | Phase 4 (Safety & Hardening) | Done |
 | AUTH-01..05 | Phase 4 (Safety & Hardening) | Done |
-| IGN-01..04 | Phase 4 (Safety & Hardening) | Done — IGN-04 partial |
+| IGN-01..04 | Phase 4 (Safety & Hardening) | Done — IGN-04 documented in Phase 7 |
 | OBS-01..03 | Phase 4 (Safety & Hardening) | Done |
 | CACHE-01..07 | Phase 5 (Cache & Template Watchers) | Done |
 | TMPL-01..05 | Phase 5 (Cache & Template Watchers) | Done |
 | SIGL-01..06 | Phase 6 (Signal & Logging Watchers) | Done |
 | LOG-01..06 | Phase 6 (Signal & Logging Watchers) | Done |
-| ASYNC-03 | Phase 7 (Async / ASGI verification) | Pending |
+| ASYNC-03 | Phase 7 (Async / ASGI verification) | Done |
 
 **Coverage:**
 - v1.1 requirements: **53** total (Cache 7 + Template 5 + Signal 6 + Logging 6 + Mask 6 + Samp 5 + Auth 5 + Async 3 + Ignore 4 + Obs 3 + ASYNC-03 already counted)

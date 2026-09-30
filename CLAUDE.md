@@ -23,6 +23,7 @@ Unified runtime observability for Django — Django's answer to Laravel Telescop
 ```bash
 uv run --extra dev python -m pytest              # full suite (use `python -m` so tests.settings imports)
 uv run --extra dev python -m pytest tests/test_sql_watcher.py -q
+uv build && python scripts/check_dist.py dist/   # built wheel/sdist must contain templates, migrations, LICENSE
 ```
 
 ## Workflow
@@ -34,11 +35,13 @@ Work follows the Superpowers flow:
 3. **Execute** on a feature branch with TDD (`superpowers:subagent-driven-development` or `superpowers:executing-plans`).
 4. **Finish** (`superpowers:finishing-a-development-branch`), then tick the work items in `docs/roadmap.md` and update statuses in `docs/requirements.md` and `docs/project.md`.
 
-Next up: **Phase 7 — ASGI Verification & v1.1 Release Prep** (end-to-end ASGI proof, license, README, CI).
+v1.1 is complete (package **0.2.0**). Next up: the owner tags and publishes 0.2.0, then **v1.2** gets broken into phases in `docs/roadmap.md` (Model, Email, Management Command, Middleware watchers). The MASK-05 fail-open fix is the top open item.
 
 ## Constraints
 
 - Python ≥ 3.8, Django ≥ 4.0. **No new runtime dependencies** — the package stays a leaf.
+- Annotations must import on Python 3.8: no `X | Y` unions or `list[...]`-style builtin generics (`tests/test_compat.py` enforces this). CI runs Python 3.8–3.13 × Django 4.2/5.2.
+- The version lives only in `django_inspector/__init__.py` (`__version__`); record user-visible changes in `CHANGELOG.md`, and keep the README settings table in step with `conf.DEFAULTS` (`tests/test_docs.py`).
 - `DJANGO_INSPECTOR` settings keys and the `Event` model schema are public: new keys are additive, schema changes ship a new migration (never edit `0001_initial.py`).
 - Middleware overhead stays under ~2 ms p50 with all watchers on at default sampling.
 - Every watcher works under WSGI **and** ASGI. Per-trace state uses `ContextVar`, never `threading.local`.
