@@ -6,17 +6,16 @@ Requirements: SQL-01..SQL-07
 """
 
 import logging
-import re
 import time
 from collections import Counter
 from contextvars import ContextVar
-from functools import lru_cache
 from typing import Tuple, Union
 
 from django.db import connections
 
 from django_inspector.conf import inspector_settings
 from django_inspector.sampling import detail_enabled
+from django_inspector.storage.columns import normalize_sql as _normalize_sql
 from django_inspector.tracing.context import get_current_trace_id
 from django_inspector.watchers import registry
 from django_inspector.watchers.base import BaseWatcher
@@ -242,20 +241,8 @@ def _params_key(params):
         return id(params)
 
 
-_QUOTED = re.compile(r"'[^']*'")
-_NUMBER = re.compile(r"\b\d+\b")
-
-
-@lru_cache(maxsize=2048)
-def _normalize_sql(sql: str) -> str:
-    """
-    Normalize SQL by replacing literal values with placeholders.
-    Used for N+1 pattern comparison.
-    """
-    normalized = _QUOTED.sub("'?'", sql)
-    normalized = _NUMBER.sub("?", normalized)
-    return normalized.replace("%s", "?").strip()
-
+# _normalize_sql above is django_inspector.storage.columns.normalize_sql,
+# re-exported under its old name so existing imports keep working.
 
 # Auto-register on import
 register("sql", SQLWatcher)

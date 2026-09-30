@@ -39,7 +39,7 @@ _LIBRARY_SEGMENTS = ("/site-packages/", "/dist-packages/")
 _library_file_cache: Dict[str, bool] = {}
 
 
-def _is_library_file(filename: str) -> bool:
+def is_library_file(filename: str) -> bool:
     cached = _library_file_cache.get(filename)
     if cached is not None:
         return cached
@@ -56,6 +56,11 @@ def _is_library_file(filename: str) -> bool:
     return result
 
 
+# Old name kept importable: columns.py and any external code that imported
+# the pre-public name still works.
+_is_library_file = is_library_file
+
+
 def extract_origin() -> dict:
     """
     The innermost application frame on the call stack: the code that
@@ -66,7 +71,7 @@ def extract_origin() -> dict:
     frame: Optional[FrameType] = sys._getframe(1)
     while frame is not None:
         code = frame.f_code
-        if not _is_library_file(code.co_filename):
+        if not is_library_file(code.co_filename):
             return {"file": code.co_filename, "line": frame.f_lineno, "function": code.co_name}
         frame = frame.f_back
     return {"file": None, "line": None, "function": None}
