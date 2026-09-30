@@ -9,21 +9,21 @@ Requirements for the v1.1 milestone: close PRD Phase 1 watchers (Cache, Template
 
 ### Cache Watcher (PRD §11.5)
 
-- [ ] **CACHE-01**: Cache `get` operations are captured with key, backend alias, hit/miss flag, and duration
-- [ ] **CACHE-02**: Cache `set` operations are captured with key, backend alias, TTL, value size (not value itself), and duration
-- [ ] **CACHE-03**: Cache `delete` and `clear` operations are captured with key (or "*" for clear) and backend alias
-- [ ] **CACHE-04**: Multi-key cache ops (`get_many`, `set_many`, `delete_many`) are captured with per-key entries or a single event with key count
-- [ ] **CACHE-05**: Cache events are correlated to the originating request via `trace_id`
-- [ ] **CACHE-06**: Cache watcher installs hooks at startup and uninstalls cleanly on `disable()`; idempotent
-- [ ] **CACHE-07**: Cache watcher is disabled by default in `WATCHERS` until host opts in (consistency with PRD §16 defaults TBD)
+- [x] **CACHE-01**: Cache `get` operations are captured with key, backend alias, hit/miss flag, and duration
+- [x] **CACHE-02**: Cache `set` operations are captured with key, backend alias, TTL, value size (not value itself), and duration
+- [x] **CACHE-03**: Cache `delete` and `clear` operations are captured with key (or "*" for clear) and backend alias
+- [x] **CACHE-04**: Multi-key cache ops (`get_many`, `set_many`, `delete_many`) are captured with per-key entries or a single event with key count — one event per call with keys (capped at 100) and key_count
+- [x] **CACHE-05**: Cache events are correlated to the originating request via `trace_id`
+- [x] **CACHE-06**: Cache watcher installs hooks at startup and uninstalls cleanly on `disable()`; idempotent
+- [x] **CACHE-07**: Cache watcher is disabled by default in `WATCHERS` until host opts in (consistency with PRD §16 defaults TBD) — off by default ("cache": False)
 
 ### Template Watcher (PRD §11.6)
 
-- [ ] **TMPL-01**: Each template render is captured with template name, source path, and render duration
-- [ ] **TMPL-02**: Nested template renders (includes/extends) record parent-child relationship in metadata
-- [ ] **TMPL-03**: Context size (number of top-level keys, optionally serialized size in bytes) is captured per render
-- [ ] **TMPL-04**: Template events are correlated to the originating request via `trace_id`
-- [ ] **TMPL-05**: Template watcher works with Django's built-in engine; DTL only for v1.1 (Jinja2 deferred)
+- [x] **TMPL-01**: Each template render is captured with template name, source path, and render duration
+- [x] **TMPL-02**: Nested template renders (includes/extends) record parent-child relationship in metadata
+- [x] **TMPL-03**: Context size (number of top-level keys, optionally serialized size in bytes) is captured per render — key count and key names; serialized byte size deferred
+- [x] **TMPL-04**: Template events are correlated to the originating request via `trace_id`
+- [x] **TMPL-05**: Template watcher works with Django's built-in engine; DTL only for v1.1 (Jinja2 deferred)
 
 ### Signal Watcher (PRD §11.7)
 
@@ -155,8 +155,8 @@ Update the status when a spec for that phase ships. Specs and plans in `docs/sup
 | AUTH-01..05 | Phase 4 (Safety & Hardening) | Done |
 | IGN-01..04 | Phase 4 (Safety & Hardening) | Done — IGN-04 partial |
 | OBS-01..03 | Phase 4 (Safety & Hardening) | Done |
-| CACHE-01..07 | Phase 5 (Cache & Template Watchers) | Pending |
-| TMPL-01..05 | Phase 5 (Cache & Template Watchers) | Pending |
+| CACHE-01..07 | Phase 5 (Cache & Template Watchers) | Done |
+| TMPL-01..05 | Phase 5 (Cache & Template Watchers) | Done |
 | SIGL-01..06 | Phase 6 (Signal & Logging Watchers) | Pending |
 | LOG-01..06 | Phase 6 (Signal & Logging Watchers) | Pending |
 | ASYNC-03 | Phase 7 (Async / ASGI verification) | Pending |

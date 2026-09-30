@@ -91,11 +91,13 @@ Known gaps carried forward: MASK-04 (no Luhn check), MASK-05 (unmasked fallback 
   4. Rendering a Django template within a request produces a `template.rendered` event with name, path, duration, and context size.
   5. Nested template includes/extends record parent-child relationships.
   6. Both watchers are async-safe (work under ASGI) and respect `SAMPLING_RATE`.
-**Spec**: not started — likely one spec per watcher (`docs/superpowers/specs/`)
+**Spec**: [2026-09-30-cache-template-watchers-design.md](superpowers/specs/2026-09-30-cache-template-watchers-design.md) · **Plan**: [2026-09-30-cache-template-watchers.md](superpowers/plans/2026-09-30-cache-template-watchers.md)
 
 Work items:
-- [ ] Cache watcher
-- [ ] Template watcher
+- [x] Cache watcher
+- [x] Template watcher
+- [x] Cache and Templates dashboard pages + request-detail integration
+- [x] Dashboard requests no longer open a trace (orphan-event fix)
 
 ---
 
@@ -155,8 +157,8 @@ Phases not yet broken down.
 | 2. Watchers (Request/SQL/Exception) | v1.0 | 1/1 | Complete | 2026-05-03 |
 | 3. Dashboard | v1.0 | 3/3 | Complete | 2026-05-03 |
 | 4. Safety & Hardening | v1.1 | 3/3 | Complete | 2026-05-23 |
-| 5. Cache & Template Watchers | v1.1 | — | Not started (next) | - |
-| 6. Signal & Logging Watchers | v1.1 | — | Not started | - |
+| 5. Cache & Template Watchers | v1.1 | 1/1 | Complete | 2026-09-30 |
+| 6. Signal & Logging Watchers | v1.1 | — | Not started (next) | - |
 | 7. ASGI Verification & Release Prep | v1.1 | — | Not started | - |
 
 ## How work proceeds
@@ -180,3 +182,6 @@ Carried over from the GSD state file on 2026-09-30:
 | Schema | Denormalized event columns (`method`, `status_code`) | Deferred to v1.2 | v1.1 init |
 | Plugins | `setuptools` entry_points for external watchers | Deferred | v1.1 init |
 | Dashboard | Search, comparison, JSON/CSV export | Deferred | v1.1 init |
+| Schema | Capture-time event timestamps (`auto_now_add` is set at flush, so waterfall offsets are meaningless; needs a migration) | Deferred | Phase 5 |
+| Watchers | Jinja2 template renders | Deferred | Phase 5 |
+| Watchers | Cache `has_key` / `incr` / `decr` / `touch`; value size for non-str/bytes values | Deferred | Phase 5 |

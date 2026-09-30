@@ -29,13 +29,14 @@
 - ✓ **Async-safe buffers** — replace `threading.local` with `ContextVar` in SQL log + event buffer — v1.1 (Phase 4)
 - ✓ **`IGNORE_PATHS` / `IGNORE_EXCEPTIONS`** — config-driven filtering at watcher entry — v1.1 (Phase 4)
 - ✓ **Quiet-by-default logging** — replace silent `except Exception: pass` with `logger.warning(..., exc_info=True)` everywhere — v1.1 (Phase 4)
+- ✓ **Cache watcher** — get/set/add/delete/clear + `*_many`, key, TTL, backend, alias, hit/miss, value size; off by default (PRD §11.5) — v1.1 (Phase 5)
+- ✓ **Template watcher** — render tree (extends/include), render time, context size, source path; off by default (PRD §11.6) — v1.1 (Phase 5)
+- ✓ Dashboard: Cache and Templates pages; request detail shows cache/template events — v1.1 (Phase 5)
 
 ### Active
 
-<!-- v1.1 — Finish the remaining PRD Phase-1 watchers (roadmap Phases 5–7). -->
+<!-- v1.1 — Finish the remaining PRD Phase-1 watchers (roadmap Phases 6–7). -->
 
-- [ ] **Cache watcher** — get/set/delete/clear, key, TTL, backend, hit/miss tracking (PRD §11.5)
-- [ ] **Template watcher** — template hierarchy, render time, context size, source path (PRD §11.6)
 - [ ] **Signal watcher** — signal, sender, receiver, execution time, ordering (PRD §11.7)
 - [ ] **Logging watcher** — logger, level, message, traceback, file, line, with trace correlation (PRD §11.4)
 
@@ -63,6 +64,7 @@ This is **not** a greenfield project. v1.0 MVP was completed and tagged on 2026-
 - **Phase 2 — Watchers** (commit `22aaf7a`): Request, SQL, Exception watchers landed together. Net +1,918 lines.
 - **Phase 3 — Dashboard + ops** (3 plans, commits `75af996`, `2b58322`, `8b90e3c`): dashboard foundation, `inspector_cleanup`, dashboard pages with HTMX.
 - **Phase 4 — Safety & Hardening** (3 plans, commits `d4dc5db`, `ed5daa5`, `8b483ac`): masking, sampling, dashboard auth, ignore lists, ContextVar buffers, loud-by-default logging. 128 tests passing.
+- **Phase 5 — Cache & Template Watchers** (branch `feat/phase-5-cache-template-watchers`, commits `2ff720f`, `4ef85e6`, `6a7b81a`, `95de13f`, `8012502`, `52ff915`, `6594587`): cache and template watchers, their dashboard pages, and a fix so dashboard requests are no longer traced. 205 tests passing.
 
 Full brownfield map lives under `docs/architecture/` (STACK, ARCHITECTURE, STRUCTURE, INTEGRATIONS, CONVENTIONS, TESTING, CONCERNS).
 
@@ -108,4 +110,4 @@ Update this document when a spec ships or scope changes:
 4. Decisions to log? → Add to Key Decisions.
 
 ---
-*Last updated: 2026-09-30 — migrated from GSD `.planning/` to Superpowers `docs/`*
+*Last updated: 2026-09-30 — Phase 5 complete*

@@ -1,6 +1,6 @@
 # django-inspector
 
-Unified runtime observability for Django — Django's answer to Laravel Telescope. Watchers capture requests, SQL, exceptions (and soon cache, templates, signals, logs) as events correlated by a per-request `trace_id`, shown in a built-in HTMX dashboard.
+Unified runtime observability for Django — Django's answer to Laravel Telescope. Watchers capture requests, SQL, exceptions, cache operations and template renders (and soon signals and logs) as events correlated by a per-request `trace_id`, shown in a built-in HTMX dashboard.
 
 **Core value:** one dashboard, one trace — every request's full story is reconstructable from a single trace id.
 
@@ -34,7 +34,7 @@ Work follows the Superpowers flow:
 3. **Execute** on a feature branch with TDD (`superpowers:subagent-driven-development` or `superpowers:executing-plans`).
 4. **Finish** (`superpowers:finishing-a-development-branch`), then tick the work items in `docs/roadmap.md` and update statuses in `docs/requirements.md` and `docs/project.md`.
 
-Next up: **Phase 5 — Cache & Template Watchers** (`CACHE-01..07`, `TMPL-01..05`).
+Next up: **Phase 6 — Signal & Logging Watchers** (`SIGL-01..06`, `LOG-01..06`).
 
 ## Constraints
 
