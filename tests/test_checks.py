@@ -87,6 +87,22 @@ class TestSettingsCheck:
     def test_unimportable_permission_is_an_error(self):
         assert _ids(checks.check_settings()) == ["django_inspector.E005"]
 
+    @override_settings(DJANGO_INSPECTOR={"COMMAND_WATCH_LIST": "backfill"})
+    def test_command_watch_list_must_be_a_list_of_strings(self):
+        assert "django_inspector.E002" in _ids(checks.check_settings())
+
+    @override_settings(DJANGO_INSPECTOR={"COMMAND_WATCH_LIST": ["backfill"]})
+    def test_command_watch_list_of_strings_passes(self):
+        assert checks.check_settings() == []
+
+    @override_settings(DJANGO_INSPECTOR={"COMMAND_WATCH_LIST": ["migrate"]})
+    def test_never_traced_name_warns(self):
+        assert _ids(checks.check_settings()) == ["django_inspector.W009"]
+
+    @override_settings(DJANGO_INSPECTOR={"COMMAND_WATCH_LIST": ["backfill", "shell"]})
+    def test_never_traced_name_warns_alongside_a_valid_one(self):
+        assert _ids(checks.check_settings()) == ["django_inspector.W009"]
+
 
 class TestMiddlewareCheck:
     def test_first_middleware_passes(self):
