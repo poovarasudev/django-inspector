@@ -80,7 +80,7 @@ async def refresh_cache(): ...
 ```
 
 - **Export.** `trace` is a class exported from `django_inspector/__init__.py` and from `django_inspector.tracing`. Importing it must not import Django models: every storage or watcher import inside it is deferred to call time.
-- **One-shot.** A `trace` instance can't be entered twice at once. Each `with`, and each decorated call, creates its own internal run state, so one decorator object can be used by concurrent calls.
+- **One run per object at a time.** Entering a `trace` object that's already open raises `RuntimeError`. This is a programming error, not an inspector failure. The decorator never hits it: each decorated call opens a fresh internal `_Run`, so one decorated function can run concurrently. `with trace(...)` creates a new object each time.
 
 ### Behaviour of one run
 
@@ -181,7 +181,7 @@ LOGGING = {
 
 | File | Covers |
 |---|---|
-| `tests/test_trace_api.py` (new) | `with`, `async with`, sync decorator and async decorator all produce one kept trace with a `trace.completed` anchor; `__enter__` returns the trace id; SQL, `log.record` and exception events inside the block share it; nested `trace()` joins (one anchor, one flush, the outer id returned); the exception is recorded, then re-raised as the same object with its traceback; `status`/`error_type` in the anchor; `SAMPLING_RATE=0` drops an OK run but keeps a failing run and a slow run (patched clock or threshold); disabled inspector does nothing; a failing `flush_events` is logged and doesn't break the block, while `INSPECTOR_RAISE_ERRORS` raises; a failing inspector step during an exception still re-raises the user's exception; context is fully reset afterwards (no trace id, a fresh buffer next time); concurrent `async with` runs under `asyncio.gather` stay isolated; one decorated function called concurrently gets separate traces; importing `django_inspector` doesn't import the storage models |
+| `tests/test_trace_api.py` (new) | re-entering an open `trace` object raises `RuntimeError`; `with`, `async with`, sync decorator and async decorator all produce one kept trace with a `trace.completed` anchor; `__enter__` returns the trace id; SQL, `log.record` and exception events inside the block share it; nested `trace()` joins (one anchor, one flush, the outer id returned); the exception is recorded, then re-raised as the same object with its traceback; `status`/`error_type` in the anchor; `SAMPLING_RATE=0` drops an OK run but keeps a failing run and a slow run (patched clock or threshold); disabled inspector does nothing; a failing `flush_events` is logged and doesn't break the block, while `INSPECTOR_RAISE_ERRORS` raises; a failing inspector step during an exception still re-raises the user's exception; context is fully reset afterwards (no trace id, a fresh buffer next time); concurrent `async with` runs under `asyncio.gather` stay isolated; one decorated function called concurrently gets separate traces; importing `django_inspector` doesn't import the storage models |
 | `tests/test_tracing.py` | `TraceScope` start/flush/close; `close()` after an async flush restores the context; `flush(keep=False)` writes nothing |
 | `tests/test_sampling.py` | `should_keep` truth table; `compute_sampling_decision` behaviour unchanged |
 | `tests/test_exception_watcher.py` | `capture()` records outside a request; honours `IGNORE_EXCEPTIONS`; the signal path unchanged |
