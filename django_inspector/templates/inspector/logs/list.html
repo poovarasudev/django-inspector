@@ -1,0 +1,37 @@
+{% extends "inspector/base.html" %}
+{% block title %}Logs — Inspector{% endblock %}
+{% block content %}
+<div class="inspector-page-header">
+    <h1>Logs</h1>
+</div>
+
+<form class="inspector-filter-bar"
+      hx-get="{% url 'inspector:logs-list' %}"
+      hx-target="#results-table"
+      hx-push-url="true"
+      hx-trigger="change, keyup changed delay:300ms from:input[type=search]">
+    <label>
+        Level
+        <select name="level">
+            <option value="">All</option>
+            {% for value, name in levels %}
+            <option value="{{ value }}" {% if filters.level == value|stringformat:"d" %}selected{% endif %}>{{ name }} and above</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>
+        Logger
+        <input type="search" name="logger" value="{{ filters.logger|default:'' }}" placeholder="contains…">
+    </label>
+    <label>
+        Message
+        <input type="search" name="message" value="{{ filters.message|default:'' }}" placeholder="contains…">
+    </label>
+</form>
+
+<div id="results-table">
+    {% include "inspector/logs/_table.html" %}
+</div>
+
+{% include "inspector/_pagination.html" %}
+{% endblock %}

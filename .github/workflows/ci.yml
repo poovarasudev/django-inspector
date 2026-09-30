@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  lint:
+    name: Lint and type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install ruff mypy "django~=5.2.0"
+      - run: ruff check django_inspector tests scripts
+      - run: mypy
+
+  test:
+    name: Python ${{ matrix.python }} · Django ${{ matrix.django }}
+    runs-on: ${{ matrix.os || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Python 3.8 builds are not published for the newest Ubuntu runner.
+          - { python: "3.8", django: "4.2", os: "ubuntu-22.04" }
+          - { python: "3.9", django: "4.2" }
+          - { python: "3.10", django: "4.2" }
+          - { python: "3.11", django: "4.2" }
+          - { python: "3.12", django: "4.2" }
+          - { python: "3.10", django: "5.2" }
+          - { python: "3.11", django: "5.2" }
+          - { python: "3.12", django: "5.2" }
+          - { python: "3.13", django: "5.2" }
+          - { python: "3.14", django: "5.2" }
+          - { python: "3.12", django: "6.0" }
+          - { python: "3.14", django: "6.0" }
+          - { python: "3.12", django: "6.1" }
+          - { python: "3.13", django: "6.1" }
+          - { python: "3.14", django: "6.1" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "django~=${{ matrix.django }}.0" pytest pytest-django
+          python -m pip install --no-deps -e .
+      - name: Test
+        run: python -m pytest -q
+
+  coverage:
+    name: Coverage (Python 3.13 · Django 5.2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: |
+          python -m pip install "django~=5.2.0" pytest pytest-django coverage
+          python -m pip install --no-deps -e .
+      - run: coverage run -m pytest -q
+      - run: coverage report --fail-under=85
+
+  postgres:
+    name: PostgreSQL (Python 3.12 · Django 5.2)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: inspector_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      INSPECTOR_TEST_DB: postgres
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          python -m pip install "django~=5.2.0" "psycopg[binary]" pytest pytest-django
+          python -m pip install --no-deps -e .
+      - run: python -m pytest -q
+
+  benchmark:
+    name: Overhead benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          python -m pip install "django~=5.2.0"
+          python -m pip install --no-deps -e .
+      # The goal is ~2 ms p50; the budget leaves room for noisy shared runners.
+      - run: python scripts/benchmark.py --max-overhead-ms 4
+
+  build:
+    name: Build and check distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build
+      - run: python -m build
+      - run: python scripts/check_dist.py dist/

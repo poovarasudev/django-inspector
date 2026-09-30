@@ -3,7 +3,7 @@
 {% block content %}
 <div class="inspector-page-header">
     <h1>Live Feed</h1>
-    <button onclick="togglePolling()" id="pause-btn" class="inspector-btn">&#9208; Pause</button>
+    <button type="button" id="pause-btn" class="inspector-btn" data-inspector-toggle-polling="feed-table">&#9208; Pause</button>
 </div>
 <div id="feed-table"
      hx-get="{% url 'inspector:live-feed' %}"
@@ -13,21 +13,4 @@
     {% include "inspector/_live_feed_table.html" %}
 </div>
 {% include "inspector/_pagination.html" %}
-<script>
-function togglePolling() {
-    const el = document.getElementById('feed-table');
-    const btn = document.getElementById('pause-btn');
-    if (el.getAttribute('hx-trigger')) {
-        el.removeAttribute('hx-trigger');
-        htmx.process(el);
-        btn.textContent = '\u25B6 Resume';
-        btn.classList.add('inspector-btn--paused');
-    } else {
-        el.setAttribute('hx-trigger', 'every 3s');
-        htmx.process(el);
-        btn.textContent = '\u23F8 Pause';
-        btn.classList.remove('inspector-btn--paused');
-    }
-}
-</script>
 {% endblock %}

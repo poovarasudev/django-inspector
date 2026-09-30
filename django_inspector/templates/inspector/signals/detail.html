@@ -1,0 +1,63 @@
+{% extends "inspector/base.html" %}
+{% block title %}Signal Dispatch — Inspector{% endblock %}
+{% block content %}
+<a href="{% url 'inspector:signals-list' %}" class="inspector-back-link">&#8592; Back to Signals</a>
+
+<div class="inspector-page-header">
+    <h1>{{ event.metadata.signal }}</h1>
+</div>
+
+{% if event.metadata.error %}
+<div class="inspector-card">
+    <h3 style="margin-bottom: 12px; font-size: 14px; color: var(--ins-text-secondary); text-transform: uppercase;">Error</h3>
+    <pre class="inspector-code">{{ event.metadata.error }}</pre>
+</div>
+{% endif %}
+
+<div class="inspector-card">
+    <table class="inspector-detail-table">
+        <tr><th>Sender</th><td class="inspector-code-inline">{{ event.metadata.sender|default:"-" }}</td></tr>
+        <tr><th>Method</th><td>{{ event.metadata.method }}</td></tr>
+        <tr><th>Receivers</th><td>{{ event.metadata.receiver_count }}</td></tr>
+        <tr><th>Duration</th><td>{{ event.metadata.duration_ms }}ms</td></tr>
+    </table>
+</div>
+
+<div class="inspector-card">
+    <h3 style="margin-bottom: 12px; font-size: 14px; color: var(--ins-text-secondary); text-transform: uppercase;">Receivers (call order)</h3>
+    <table class="inspector-table">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Receiver</th>
+                <th>Duration</th>
+                <th>Error</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in receivers %}
+            <tr>
+                <td>{{ forloop.counter }}</td>
+                <td class="inspector-code-inline">{{ r.receiver }}</td>
+                <td>{{ r.duration_ms }}ms</td>
+                <td>{% if r.error %}<span style="color: var(--ins-status-5xx);">{{ r.error }}</span>{% else %}-{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" style="text-align: center; padding: 20px; color: var(--ins-text-secondary);">No receivers ran.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% if not_run %}
+    <div style="font-size: 12px; color: var(--ins-text-secondary); margin-top: 8px;">{{ not_run }} receiver{{ not_run|pluralize:" did,s did" }} not run because an earlier receiver raised.</div>
+    {% endif %}
+</div>
+
+{% if parent_request %}
+<div class="inspector-card">
+    <a href="{% url 'inspector:request-detail' parent_request.pk %}" style="color: var(--ins-accent); text-decoration: none; font-weight: 500;">
+        View Request &#8594; {{ parent_request.metadata.method }} {{ parent_request.metadata.path }}
+    </a>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -7,7 +7,7 @@
 ## Milestones
 
 - ✅ **v1.0 MVP** — Phases 1–3 (shipped 2026-05-03, tag `v1.0`)
-- 🚧 **v1.1 Phase-1 Completion + Production Safety** — Phases 4–7 (in progress)
+- ✅ **v1.1 Phase-1 Completion + Production Safety** — Phases 4–7 (complete 2026-09-30; releases as package version **0.2.0**, tag and PyPI publish pending)
 - 📋 **v1.2 Phase-2 PRD Watchers** — Model, Email, Management Command, Middleware (planned)
 - 📋 **v1.3 Phase-3 PRD Watchers** — Celery, Scheduler, HTTP Client, Redis (planned)
 
@@ -47,7 +47,7 @@ Plans:
 
 </details>
 
-### 🚧 v1.1 Phase-1 Completion + Production Safety (In Progress)
+### ✅ v1.1 Phase-1 Completion + Production Safety (Complete — release 0.2.0 pending tag/publish)
 
 **Milestone Goal:** Close PRD §11.4–§11.7 watchers and make `django-inspector` safe to run in production behind a load balancer with real users.
 
@@ -74,7 +74,7 @@ Plans:
 - [x] 04-02: Dashboard access control + ignore lists (`ed5daa5`)
 - [x] 04-03: Async-safe buffers (ContextVar) + loud-by-default logging cleanup (`8b483ac`)
 
-Known gaps carried forward: MASK-04 (no Luhn check), MASK-05 (unmasked fallback on masking error), IGN-04 (docs) — see `docs/requirements.md`.
+Known gaps carried forward: MASK-04 (no Luhn check), MASK-05 (unmasked fallback on masking error), IGN-04 (docs). All resolved: IGN-04 in Phase 7, MASK-04/05 on `fix/masking-fail-closed-luhn`.
 
 </details>
 
@@ -91,11 +91,13 @@ Known gaps carried forward: MASK-04 (no Luhn check), MASK-05 (unmasked fallback 
   4. Rendering a Django template within a request produces a `template.rendered` event with name, path, duration, and context size.
   5. Nested template includes/extends record parent-child relationships.
   6. Both watchers are async-safe (work under ASGI) and respect `SAMPLING_RATE`.
-**Spec**: not started — likely one spec per watcher (`docs/superpowers/specs/`)
+**Spec**: [2026-09-30-cache-template-watchers-design.md](superpowers/specs/2026-09-30-cache-template-watchers-design.md) · **Plan**: [2026-09-30-cache-template-watchers.md](superpowers/plans/2026-09-30-cache-template-watchers.md)
 
 Work items:
-- [ ] Cache watcher
-- [ ] Template watcher
+- [x] Cache watcher
+- [x] Template watcher
+- [x] Cache and Templates dashboard pages + request-detail integration
+- [x] Dashboard requests no longer open a trace (orphan-event fix)
 
 ---
 
@@ -109,11 +111,12 @@ Work items:
   3. Calling `logging.warning(...)` during a request produces a `log.record` event with logger name, level, message, file, line, and (if present) traceback.
   4. The `django_inspector` logger's own output is excluded from capture.
   5. Configurable level threshold (`LOG_LEVEL_THRESHOLD`) gates which records are captured.
-**Spec**: not started (`docs/superpowers/specs/`)
+**Spec**: [2026-09-30-signal-logging-watchers-design.md](superpowers/specs/2026-09-30-signal-logging-watchers-design.md) · **Plan**: [2026-09-30-signal-logging-watchers.md](superpowers/plans/2026-09-30-signal-logging-watchers.md)
 
 Work items:
-- [ ] Signal watcher
-- [ ] Logging watcher
+- [x] Signal watcher
+- [x] Logging watcher
+- [x] Logs and Signals dashboard pages + request-detail integration
 
 ---
 
@@ -127,11 +130,13 @@ Work items:
   3. `README.md` exists and documents install, settings, mounting, and dashboard auth.
   4. `CHANGELOG.md` lists every v1.1 change with the requirement IDs they satisfy.
   5. `python -m build` produces clean sdist + wheel; smoke install in a fresh venv works.
-**Spec**: not started (`docs/superpowers/specs/`)
+**Spec**: [2026-09-30-asgi-release-prep-design.md](superpowers/specs/2026-09-30-asgi-release-prep-design.md) · **Plan**: [2026-09-30-asgi-release-prep.md](superpowers/plans/2026-09-30-asgi-release-prep.md)
 
 Work items:
-- [ ] ASGI end-to-end test app + async coverage for v1.1 watchers
-- [ ] Release hygiene — README, CHANGELOG, license reconciliation, build smoke test
+- [x] ASGI end-to-end test app + async coverage for v1.1 watchers (and natively async-capable middleware)
+- [x] Release hygiene — README, CHANGELOG, license reconciled to MIT, version 0.2.0, build smoke test
+- [x] Fixed release blockers found on the way: Python 3.8/3.9 import crash; templates missing from the wheel; events lost under concurrent ASGI requests (per-request buffers)
+- [x] CI — GitHub Actions test matrix (Python 3.8–3.13 × Django 4.2/5.2) + distribution check
 
 ---
 
@@ -155,9 +160,9 @@ Phases not yet broken down.
 | 2. Watchers (Request/SQL/Exception) | v1.0 | 1/1 | Complete | 2026-05-03 |
 | 3. Dashboard | v1.0 | 3/3 | Complete | 2026-05-03 |
 | 4. Safety & Hardening | v1.1 | 3/3 | Complete | 2026-05-23 |
-| 5. Cache & Template Watchers | v1.1 | — | Not started (next) | - |
-| 6. Signal & Logging Watchers | v1.1 | — | Not started | - |
-| 7. ASGI Verification & Release Prep | v1.1 | — | Not started | - |
+| 5. Cache & Template Watchers | v1.1 | 1/1 | Complete | 2026-09-30 |
+| 6. Signal & Logging Watchers | v1.1 | 1/1 | Complete | 2026-09-30 |
+| 7. ASGI Verification & Release Prep | v1.1 | 1/1 | Complete | 2026-09-30 |
 
 ## How work proceeds
 
@@ -167,9 +172,11 @@ Each phase is worked with the Superpowers flow: brainstorm → spec in `docs/sup
 
 Carried over from the GSD state file on 2026-09-30:
 
-- **License inconsistency** (CONCERNS C-11): `pyproject.toml` says MIT, `LICENSE` is Apache-2.0. Reconcile in Phase 7 at the latest.
-- **No README**: `pyproject.toml` references one. Address in Phase 7.
-- **No CI**: nothing runs tests on push. Not blocking v1.1, but add before tagging.
+- ~~License inconsistency~~ — resolved in Phase 7: MIT everywhere.
+- ~~No README~~ — resolved in Phase 7 (`README.md`, `CHANGELOG.md`).
+- ~~No CI~~ — resolved in Phase 7 (`.github/workflows/ci.yml`).
+- ~~MASK-05 fail-open~~ — resolved: masking fails closed (placeholder event), and card matching now requires Luhn (MASK-04).
+- ~~Pre-release review findings~~ — resolved on `fix/masking-fail-closed-luhn` (see `CHANGELOG.md` 0.2.0 "Security"): unmasked bodies, URLs and exception locals; the `X-Forwarded-For` allowlist bypass; quadratic SQL detection; flush-time timestamps; no config validation; no retention setting; third-party htmx; CI without lint, types, coverage, PostgreSQL or Django 6.
 
 ## Deferred Items
 
@@ -177,6 +184,11 @@ Carried over from the GSD state file on 2026-09-30:
 |----------|------|--------|-------------|
 | Storage | `AbstractStorageBackend` | Deferred to first non-ORM backend | v1.1 init |
 | Persistence | Async write offload (thread pool / Celery) | Deferred to v1.2 | v1.1 init |
-| Schema | Denormalized event columns (`method`, `status_code`) | Deferred to v1.2 | v1.1 init |
+| Schema | Denormalized event columns (`method`, `status_code`, `path`); 0.2.0 added an `(event_type, -timestamp)` index and capped list counts | Deferred to v1.2 | v1.1 init |
+| Masking | Mask SQL parameters by column name (0.2.0 adds `SQL_CAPTURE_PARAMS` to turn them off) | Deferred | Review |
+| Support | Drop Python 3.8/3.9 and Django < 4.2 (all past end of life) | Planned for 0.3.0 | Review |
 | Plugins | `setuptools` entry_points for external watchers | Deferred | v1.1 init |
-| Dashboard | Search, comparison, JSON/CSV export | Deferred | v1.1 init |
+| Dashboard | Comparison, CSV export (trace-id search and JSON export shipped in 0.2.0) | Deferred | v1.1 init |
+| Watchers | Jinja2 template renders | Deferred | Phase 5 |
+| Watchers | Watching all signals (only `SIGNAL_WATCH_LIST` is supported) | Deferred | Phase 6 |
+| Watchers | Cache `has_key` / `incr` / `decr` / `touch`; value size for non-str/bytes values | Deferred | Phase 5 |

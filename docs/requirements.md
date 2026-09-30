@@ -9,49 +9,47 @@ Requirements for the v1.1 milestone: close PRD Phase 1 watchers (Cache, Template
 
 ### Cache Watcher (PRD §11.5)
 
-- [ ] **CACHE-01**: Cache `get` operations are captured with key, backend alias, hit/miss flag, and duration
-- [ ] **CACHE-02**: Cache `set` operations are captured with key, backend alias, TTL, value size (not value itself), and duration
-- [ ] **CACHE-03**: Cache `delete` and `clear` operations are captured with key (or "*" for clear) and backend alias
-- [ ] **CACHE-04**: Multi-key cache ops (`get_many`, `set_many`, `delete_many`) are captured with per-key entries or a single event with key count
-- [ ] **CACHE-05**: Cache events are correlated to the originating request via `trace_id`
-- [ ] **CACHE-06**: Cache watcher installs hooks at startup and uninstalls cleanly on `disable()`; idempotent
-- [ ] **CACHE-07**: Cache watcher is disabled by default in `WATCHERS` until host opts in (consistency with PRD §16 defaults TBD)
+- [x] **CACHE-01**: Cache `get` operations are captured with key, backend alias, hit/miss flag, and duration
+- [x] **CACHE-02**: Cache `set` operations are captured with key, backend alias, TTL, value size (not value itself), and duration
+- [x] **CACHE-03**: Cache `delete` and `clear` operations are captured with key (or "*" for clear) and backend alias
+- [x] **CACHE-04**: Multi-key cache ops (`get_many`, `set_many`, `delete_many`) are captured with per-key entries or a single event with key count — one event per call with keys (capped at 100) and key_count
+- [x] **CACHE-05**: Cache events are correlated to the originating request via `trace_id`
+- [x] **CACHE-06**: Cache watcher installs hooks at startup and uninstalls cleanly on `disable()`; idempotent
+- [x] **CACHE-07**: Cache watcher is disabled by default in `WATCHERS` until host opts in (consistency with PRD §16 defaults TBD) — off by default ("cache": False)
 
 ### Template Watcher (PRD §11.6)
 
-- [ ] **TMPL-01**: Each template render is captured with template name, source path, and render duration
-- [ ] **TMPL-02**: Nested template renders (includes/extends) record parent-child relationship in metadata
-- [ ] **TMPL-03**: Context size (number of top-level keys, optionally serialized size in bytes) is captured per render
-- [ ] **TMPL-04**: Template events are correlated to the originating request via `trace_id`
-- [ ] **TMPL-05**: Template watcher works with Django's built-in engine; DTL only for v1.1 (Jinja2 deferred)
+- [x] **TMPL-01**: Each template render is captured with template name, source path, and render duration
+- [x] **TMPL-02**: Nested template renders (includes/extends) record parent-child relationship in metadata
+- [x] **TMPL-03**: Context size (number of top-level keys, optionally serialized size in bytes) is captured per render — key count and key names; serialized byte size deferred
+- [x] **TMPL-04**: Template events are correlated to the originating request via `trace_id`
+- [x] **TMPL-05**: Template watcher works with Django's built-in engine; DTL only for v1.1 (Jinja2 deferred)
 
 ### Signal Watcher (PRD §11.7)
 
-- [ ] **SIGL-01**: Each signal dispatch is captured with signal name (dotted path), sender (class/model name), and number of receivers
-- [ ] **SIGL-02**: Per-receiver execution time is captured (start → finish), including failures
-- [ ] **SIGL-03**: Receiver ordering is preserved in event metadata (matches dispatch order)
-- [ ] **SIGL-04**: Signal events are correlated to the originating request via `trace_id` when dispatched during a request
-- [ ] **SIGL-05**: Inspector's own signal handlers (e.g., `got_request_exception` in exception watcher) are excluded from capture to prevent self-feeding
-- [ ] **SIGL-06**: User can configure which signals to watch via `SIGNAL_WATCH_LIST` (default: opt-in subset, not "all signals")
+- [x] **SIGL-01**: Each signal dispatch is captured with signal name (dotted path), sender (class/model name), and number of receivers
+- [x] **SIGL-02**: Per-receiver execution time is captured (start → finish), including failures
+- [x] **SIGL-03**: Receiver ordering is preserved in event metadata (matches dispatch order)
+- [x] **SIGL-04**: Signal events are correlated to the originating request via `trace_id` when dispatched during a request
+- [x] **SIGL-05**: Inspector's own signal handlers (e.g., `got_request_exception` in exception watcher) are excluded from capture to prevent self-feeding
+- [x] **SIGL-06**: User can configure which signals to watch via `SIGNAL_WATCH_LIST` (default: opt-in subset, not "all signals") — default is the five model signals; the signal watcher itself is off by default
 
 ### Logging Watcher (PRD §11.4)
 
-- [ ] **LOG-01**: A logging handler installed at startup captures every record routed through Python `logging` at configured level threshold or above
-- [ ] **LOG-02**: Each log event captures logger name, level (numeric + name), message, file, line, and traceback (if exc_info present)
-- [ ] **LOG-03**: Log events are correlated to the originating request via `trace_id` when emitted during a request
-- [ ] **LOG-04**: The inspector's own `django_inspector` logger output is excluded from capture (no self-feeding)
-- [ ] **LOG-05**: Configurable level threshold (`LOG_LEVEL_THRESHOLD` setting; default `WARNING` to avoid flooding)
-- [ ] **LOG-06**: Logging watcher uninstalls cleanly on `disable()`; idempotent
+- [x] **LOG-01**: A logging handler installed at startup captures every record routed through Python `logging` at configured level threshold or above — records that reach the root logger (host logger levels and `propagate=False` are respected); on by default
+- [x] **LOG-02**: Each log event captures logger name, level (numeric + name), message, file, line, and traceback (if exc_info present)
+- [x] **LOG-03**: Log events are correlated to the originating request via `trace_id` when emitted during a request
+- [x] **LOG-04**: The inspector's own `django_inspector` logger output is excluded from capture (no self-feeding)
+- [x] **LOG-05**: Configurable level threshold (`LOG_LEVEL_THRESHOLD` setting; default `WARNING` to avoid flooding)
+- [x] **LOG-06**: Logging watcher uninstalls cleanly on `disable()`; idempotent
 
 ### Sensitive-Data Masking (PRD §14)
 
 - [x] **MASK-01**: A configurable `SENSITIVE_KEYS` list redacts matching keys (case-insensitive) in request headers, request body, response headers, response body, cookies, query params, and exception locals
 - [x] **MASK-02**: Default `SENSITIVE_KEYS` includes: `password`, `passwd`, `token`, `secret`, `authorization`, `cookie`, `set-cookie`, `csrfmiddlewaretoken`, `api_key`, `api-key`, `x-api-key`, `access_token`, `refresh_token`, `session`, `sessionid`
 - [x] **MASK-03**: Redaction replaces values with `"***REDACTED***"`; keys remain visible
-- [ ] **MASK-04**: A regex-based value matcher catches credit-card-shaped (Luhn-valid 13–19 digits) and JWT-shaped strings regardless of key
-  - ⚠ Partial (Phase 4): Card matcher is shape-only; Luhn validation not implemented.
-- [ ] **MASK-05**: Masking is applied **before** `buffer_event` so unmasked data never reaches the DB
-  - ⚠ Partial (Phase 4): If `mask_metadata` raises, `BaseWatcher.record()` falls back to buffering the **unmasked** event.
+- [x] **MASK-04**: A regex-based value matcher catches credit-card-shaped (Luhn-valid 13–19 digits) and JWT-shaped strings regardless of key — Luhn check added after Phase 7 (`fix/masking-fail-closed-luhn`)
+- [x] **MASK-05**: Masking is applied **before** `buffer_event` so unmasked data never reaches the DB — fails closed since `fix/masking-fail-closed-luhn`: if masking raises, a `{"masking_failed": true, "error_type": …}` placeholder is stored instead
 - [x] **MASK-06**: Nested dicts and lists in metadata are walked recursively (with depth cap to prevent runaway)
 
 ### Sampling (PRD §15)
@@ -74,15 +72,14 @@ Requirements for the v1.1 milestone: close PRD Phase 1 watchers (Cache, Template
 
 - [x] **ASYNC-01**: SQL query log uses `ContextVar[list]` instead of `threading.local()` — verified by a test that runs two `async def` views concurrently on one thread and asserts logs don't cross
 - [x] **ASYNC-02**: Event buffer uses `ContextVar[list]` instead of `threading.local()` — same concurrency test
-- [ ] **ASYNC-03**: All v1.1 watchers (Cache, Template, Signal, Logging) are tested under ASGI middleware as well as WSGI
+- [x] **ASYNC-03**: All v1.1 watchers (Cache, Template, Signal, Logging) are tested under ASGI middleware as well as WSGI — `tests/test_asgi.py`: 5 concurrent requests through `AsyncClient`/`ASGIHandler` plus a WSGI twin; the middleware now also serves async requests natively
 
 ### Ignore Lists
 
 - [x] **IGN-01**: `IGNORE_PATHS` setting (list of regex strings, default `[]`) — matched against `request.path`; matching requests are skipped entirely (no trace id, no events)
 - [x] **IGN-02**: `IGNORE_EXCEPTIONS` setting (list of dotted-path exception class names) — matching exceptions are not recorded by the exception watcher
 - [x] **IGN-03**: Both lists are checked once per request (compiled regex cached at first use)
-- [ ] **IGN-04**: Documented examples for common ignores: `/healthz`, `/metrics`, `django.http.Http404`
-  - ⚠ Partial (Phase 4): Examples not yet documented — lands with the README in Phase 7.
+- [x] **IGN-04**: Documented examples for common ignores: `/healthz`, `/metrics`, `django.http.Http404` — in the README's Configuration section (Phase 7)
 
 ### Quiet-by-Default Logging
 
@@ -150,16 +147,16 @@ Update the status when a spec for that phase ships. Specs and plans in `docs/sup
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | ASYNC-01, ASYNC-02 | Phase 4 (Safety & Hardening) | Done |
-| MASK-01..06 | Phase 4 (Safety & Hardening) | Done — MASK-04, MASK-05 partial |
+| MASK-01..06 | Phase 4 (Safety & Hardening) | Done — MASK-04/05 completed after Phase 7 |
 | SAMP-01..05 | Phase 4 (Safety & Hardening) | Done |
 | AUTH-01..05 | Phase 4 (Safety & Hardening) | Done |
-| IGN-01..04 | Phase 4 (Safety & Hardening) | Done — IGN-04 partial |
+| IGN-01..04 | Phase 4 (Safety & Hardening) | Done — IGN-04 documented in Phase 7 |
 | OBS-01..03 | Phase 4 (Safety & Hardening) | Done |
-| CACHE-01..07 | Phase 5 (Cache & Template Watchers) | Pending |
-| TMPL-01..05 | Phase 5 (Cache & Template Watchers) | Pending |
-| SIGL-01..06 | Phase 6 (Signal & Logging Watchers) | Pending |
-| LOG-01..06 | Phase 6 (Signal & Logging Watchers) | Pending |
-| ASYNC-03 | Phase 7 (Async / ASGI verification) | Pending |
+| CACHE-01..07 | Phase 5 (Cache & Template Watchers) | Done |
+| TMPL-01..05 | Phase 5 (Cache & Template Watchers) | Done |
+| SIGL-01..06 | Phase 6 (Signal & Logging Watchers) | Done |
+| LOG-01..06 | Phase 6 (Signal & Logging Watchers) | Done |
+| ASYNC-03 | Phase 7 (Async / ASGI verification) | Done |
 
 **Coverage:**
 - v1.1 requirements: **53** total (Cache 7 + Template 5 + Signal 6 + Logging 6 + Mask 6 + Samp 5 + Auth 5 + Async 3 + Ignore 4 + Obs 3 + ASYNC-03 already counted)

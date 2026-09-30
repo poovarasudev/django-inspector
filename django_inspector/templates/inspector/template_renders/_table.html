@@ -1,0 +1,31 @@
+<table class="inspector-table">
+    <thead>
+        <tr>
+            <th>Template</th>
+            <th>Relation</th>
+            <th>Depth</th>
+            <th>Duration</th>
+            <th>Context keys</th>
+            <th>Time</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for event in page.object_list %}
+        <tr>
+            <td>
+                <a href="{% url 'inspector:template-detail' event.pk %}" class="inspector-code-inline">{{ event.metadata.name|default:"(from string)" }}</a>
+                {% if event.metadata.error %}<span class="inspector-indicator inspector-indicator--slow">ERROR</span>{% endif %}
+            </td>
+            <td>{{ event.metadata.relation|default:"top-level" }}</td>
+            <td>{{ event.metadata.depth }}</td>
+            <td>{{ event.metadata.duration_ms }}ms</td>
+            <td>{{ event.metadata.context_key_count }}</td>
+            <td>{{ event.timestamp|timesince }} ago</td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="6" style="text-align: center; padding: 40px; color: var(--ins-text-secondary);">No template renders found.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

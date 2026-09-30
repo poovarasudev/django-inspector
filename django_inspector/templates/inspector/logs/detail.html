@@ -1,0 +1,49 @@
+{% extends "inspector/base.html" %}
+{% block title %}Log Record — Inspector{% endblock %}
+{% block content %}
+<a href="{% url 'inspector:logs-list' %}" class="inspector-back-link">&#8592; Back to Logs</a>
+
+<div class="inspector-page-header">
+    <h1>
+        <span class="inspector-indicator inspector-indicator--{{ event.metadata.level_name|lower }}">{{ event.metadata.level_name }}</span>
+        {{ event.metadata.logger }}
+    </h1>
+</div>
+
+<div class="inspector-card">
+    <h3 style="margin-bottom: 12px; font-size: 14px; color: var(--ins-text-secondary); text-transform: uppercase;">Message</h3>
+    <pre class="inspector-code">{{ event.metadata.message }}</pre>
+    {% if event.metadata.message_truncated %}
+    <div style="font-size: 12px; color: var(--ins-text-secondary);">Message truncated.</div>
+    {% endif %}
+</div>
+
+<div class="inspector-card">
+    <table class="inspector-detail-table">
+        <tr><th>Level</th><td>{{ event.metadata.level_name }} ({{ event.metadata.level }})</td></tr>
+        <tr><th>Logger</th><td class="inspector-code-inline">{{ event.metadata.logger }}</td></tr>
+        <tr><th>File</th><td>{{ event.metadata.file|default:"-" }}</td></tr>
+        <tr><th>Line</th><td>{{ event.metadata.line|default:"-" }}</td></tr>
+        <tr><th>Function</th><td>{{ event.metadata.function|default:"-" }}</td></tr>
+        {% if event.metadata.exception_type %}
+        <tr><th>Exception</th><td><span class="inspector-exc-badge">{{ event.metadata.exception_type }}</span></td></tr>
+        {% endif %}
+    </table>
+</div>
+
+{% if event.metadata.traceback %}
+<div class="inspector-card">
+    <h3 style="margin-bottom: 12px; font-size: 14px; color: var(--ins-text-secondary); text-transform: uppercase;">Traceback</h3>
+    <pre class="inspector-code">{{ event.metadata.traceback }}</pre>
+</div>
+{% endif %}
+
+{% if parent_request %}
+<div class="inspector-card">
+    <a href="{% url 'inspector:request-detail' parent_request.pk %}" style="color: var(--ins-accent); text-decoration: none; font-weight: 500;">
+        View Request &#8594; {{ parent_request.metadata.method }} {{ parent_request.metadata.path }}
+    </a>
+</div>
+{% endif %}
+
+{% endblock %}

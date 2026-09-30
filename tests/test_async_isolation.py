@@ -6,11 +6,10 @@ Requirements: ASYNC-01, ASYNC-02
 
 import asyncio
 
-import pytest
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
-from django_inspector.storage.flush import _buffer_var, buffer_event, clear_buffer
-from django_inspector.watchers.sql import _query_log_var, _get_query_log, clear_query_log
+from django_inspector.storage.flush import _buffer_var, clear_buffer
+from django_inspector.watchers.sql import _get_query_log, _query_log_var, clear_query_log
 
 
 class TestFlushContextVarIsolation(TestCase):
@@ -69,14 +68,14 @@ class TestQueryLogContextVarIsolation(TestCase):
     def test_query_log_starts_empty_in_fresh_context(self):
         _query_log_var.set(None)
         log = _get_query_log()
-        assert log == []
+        assert len(log) == 0
 
     def test_clear_query_log_empties_current_context(self):
         _query_log_var.set(None)
         log = _get_query_log()
-        log.append({"sql": "SELECT 1"})
+        log.add("SELECT 1", None)
         clear_query_log()
-        assert _get_query_log() == []
+        assert len(_get_query_log()) == 0
 
     def test_two_coroutines_have_isolated_query_logs(self):
         """Each async context gets its own query log — no cross-contamination."""
@@ -87,16 +86,16 @@ class TestQueryLogContextVarIsolation(TestCase):
         async def task_a():
             _query_log_var.set(None)
             q = _get_query_log()
-            q.append("query_a")
+            q.add("query_a", None)
             await asyncio.sleep(0)
-            log_a.extend(_get_query_log())
+            log_a.extend(_get_query_log().similar)
 
         async def task_b():
             _query_log_var.set(None)
             q = _get_query_log()
-            q.append("query_b")
+            q.add("query_b", None)
             await asyncio.sleep(0)
-            log_b.extend(_get_query_log())
+            log_b.extend(_get_query_log().similar)
 
         async def run():
             await asyncio.gather(task_a(), task_b())

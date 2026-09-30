@@ -1,8 +1,11 @@
-from django.core.management.base import BaseCommand
-from django.utils import timezone
 from datetime import timedelta
 
+from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
+
+from django_inspector.conf import inspector_settings
 from django_inspector.storage.models import Event
+from django_inspector.storage.retention import delete_older_than
 
 
 class Command(BaseCommand):
@@ -11,9 +14,15 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument(
             "--hours",
+            type=float,
+            default=None,
+            help="Delete events older than N hours (default: RETENTION_HOURS, or 24)",
+        )
+        parser.add_argument(
+            "--batch-size",
             type=int,
-            default=24,
-            help="Delete events older than N hours (default: 24)",
+            default=10000,
+            help="Rows deleted per statement (default: 10000)",
         )
         parser.add_argument(
             "--dry-run",
@@ -23,14 +32,21 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         hours = options["hours"]
-        dry_run = options["dry_run"]
+        if hours is None:
+            hours = inspector_settings.RETENTION_HOURS or 24
+        if hours <= 0:
+            raise CommandError("--hours must be greater than 0.")
+        if options["batch_size"] <= 0:
+            raise CommandError("--batch-size must be greater than 0.")
+        hours_text = "%g" % hours
         cutoff = timezone.now() - timedelta(hours=hours)
-        qs = Event.objects.filter(timestamp__lt=cutoff)
-        count = qs.count()
 
-        if dry_run:
-            self.stdout.write(f"Would delete {count} event(s) older than {hours} hours (cutoff: {cutoff})")
+        if options["dry_run"]:
+            count = Event.objects.filter(timestamp__lt=cutoff).count()
+            self.stdout.write(
+                f"Would delete {count} event(s) older than {hours_text} hours (cutoff: {cutoff})"
+            )
             return
 
-        deleted, _ = qs.delete()
-        self.stdout.write(self.style.SUCCESS(f"Deleted {deleted} event(s) older than {hours} hours"))
+        deleted = delete_older_than(cutoff, batch_size=options["batch_size"])
+        self.stdout.write(self.style.SUCCESS(f"Deleted {deleted} event(s) older than {hours_text} hours"))

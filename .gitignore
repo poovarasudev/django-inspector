@@ -183,6 +183,8 @@ cython_debug/
 # AI related files
 .agent/
 .windsurf/
-.github/
+# Local tool installs live under .github/; only CI workflows are tracked.
+.github/*
+!.github/workflows/
 .claude/
 prd.md

@@ -1,17 +1,18 @@
 """Tests for the Request Watcher (REQ-01..REQ-06)."""
 
-import pytest
-from django.test import RequestFactory, TestCase, override_settings
-from django.http import HttpResponse
+import json
 
+import pytest
+from django.http import HttpResponse
+from django.test import RequestFactory, TestCase, override_settings
+
+from django_inspector.storage.flush import _get_buffer, clear_buffer
+from django_inspector.tracing.context import clear_trace_id, generate_trace_id, set_trace_id
 from django_inspector.watchers.request import (
     RequestWatcher,
     _extract_headers,
-    _get_client_ip,
     _get_user_info,
 )
-from django_inspector.tracing.context import set_trace_id, clear_trace_id, generate_trace_id
-from django_inspector.storage.flush import _get_buffer, clear_buffer
 
 
 @pytest.fixture(autouse=True)
@@ -112,19 +113,9 @@ class TestRequestWatcher(TestCase):
         # No authenticated user on this request
         assert meta["user"] is None
 
-    @override_settings(DJANGO_INSPECTOR={"INSPECTOR_ENABLED": True, "DASHBOARD_URL_PREFIX": "inspector/"})
-    def test_excludes_inspector_requests(self):
-        """REQ-06: Inspector's own requests are excluded."""
-        request = self.factory.get("/inspector/feed/")
-        response = HttpResponse("ok")
-        self.watcher.on_request(request)
-        self.watcher.on_response(request, response)
-
-        buffer = _get_buffer()
-        assert len(buffer) == 0
-
-    def test_x_forwarded_for_ip(self):
-        """REQ-05: Checks X-Forwarded-For for client IP."""
+    @override_settings(DJANGO_INSPECTOR={"TRUSTED_PROXY_COUNT": 1})
+    def test_x_forwarded_for_ip_behind_a_trusted_proxy(self):
+        """REQ-05: X-Forwarded-For is used only for TRUSTED_PROXY_COUNT hops."""
         request = self.factory.get(
             "/api/test/",
             HTTP_X_FORWARDED_FOR="10.0.0.1, 192.168.1.1",
@@ -136,7 +127,15 @@ class TestRequestWatcher(TestCase):
 
         buffer = _get_buffer()
         meta = buffer[0]["metadata"]
-        assert meta["client_ip"] == "10.0.0.1"
+        assert meta["client_ip"] == "192.168.1.1"
+
+    def test_x_forwarded_for_is_ignored_by_default(self):
+        request = self.factory.get(
+            "/api/test/", HTTP_X_FORWARDED_FOR="10.0.0.1", REMOTE_ADDR="203.0.113.9"
+        )
+        self.watcher.on_request(request)
+        self.watcher.on_response(request, HttpResponse("ok"))
+        assert _get_buffer()[0]["metadata"]["client_ip"] == "203.0.113.9"
 
 
 class TestExtractHeaders:
@@ -153,17 +152,6 @@ class TestExtractHeaders:
         assert headers["Content-Type"] == "application/json"
         assert headers["Content-Length"] == "42"
 
-
-class TestGetClientIp:
-    def test_xff_takes_priority(self):
-        class FakeRequest:
-            META = {"HTTP_X_FORWARDED_FOR": "1.2.3.4, 5.6.7.8", "REMOTE_ADDR": "127.0.0.1"}
-        assert _get_client_ip(FakeRequest()) == "1.2.3.4"
-
-    def test_falls_back_to_remote_addr(self):
-        class FakeRequest:
-            META = {"REMOTE_ADDR": "192.168.0.1"}
-        assert _get_client_ip(FakeRequest()) == "192.168.0.1"
 
 
 class TestGetUserInfo:
@@ -187,3 +175,137 @@ class TestGetUserInfo:
         class FakeRequest:
             user = FakeUser()
         assert _get_user_info(FakeRequest()) == "42"
+
+
+class TestBodyAndUrlMasking(TestCase):
+    """S1/S2: bodies and the full URL are masked like every other field (MASK-01, REQ-03)."""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.watcher = RequestWatcher()
+        self.watcher.enable()
+        self.token = set_trace_id(generate_trace_id())
+
+    def tearDown(self):
+        clear_trace_id(self.token)
+        self.watcher.disable()
+
+    def _record(self, request, response=None):
+        self.watcher.on_request(request)
+        self.watcher.on_response(request, response if response is not None else HttpResponse("ok"))
+        return _get_buffer()[-1]["metadata"]
+
+    def test_form_body_password_is_masked(self):
+        request = self.factory.post(
+            "/login/", "username=u&password=hunter2",
+            content_type="application/x-www-form-urlencoded",
+        )
+        meta = self._record(request)
+        assert "hunter2" not in meta["request_body"]
+        assert json.loads(meta["request_body"]) == {"username": "u", "password": "***REDACTED***"}
+        assert meta["request_body_format"] == "form"
+
+    def test_json_body_password_is_masked(self):
+        request = self.factory.post(
+            "/login/", json.dumps({"user": {"password": "hunter2"}, "n": 1}),
+            content_type="application/json",
+        )
+        meta = self._record(request)
+        assert json.loads(meta["request_body"]) == {"user": {"password": "***REDACTED***"}, "n": 1}
+        assert meta["request_body_format"] == "json"
+
+    def test_vendor_json_content_type_is_parsed(self):
+        request = self.factory.post(
+            "/x/", json.dumps({"token": "t"}), content_type="application/vnd.api+json"
+        )
+        assert "***REDACTED***" in self._record(request)["request_body"]
+
+    def test_unparseable_json_is_not_stored(self):
+        request = self.factory.post(
+            "/login/", '{"password": "hunter2"', content_type="application/json"
+        )
+        meta = self._record(request)
+        assert "hunter2" not in meta["request_body"]
+        assert meta["request_body_format"] == "unparseable"
+
+    def test_unparsed_multipart_body_is_not_stored(self):
+        request = self.factory.post("/login/", {"username": "u", "password": "hunter2"})
+        meta = self._record(request)
+        assert "hunter2" not in meta["request_body"]
+        assert meta["request_body_format"] == "multipart"
+
+    def test_parsed_multipart_fields_are_masked_and_files_summarised(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        upload = SimpleUploadedFile("a.txt", b"file-bytes")
+        request = self.factory.post("/up/", {"password": "hunter2", "note": "hi", "doc": upload})
+        request.POST  # the view parsed the body
+        meta = self._record(request)
+        body = json.loads(meta["request_body"])
+        assert body["fields"] == {"password": "***REDACTED***", "note": "hi"}
+        assert body["files"] == {"doc": ["a.txt (10 bytes)"]}
+        assert "file-bytes" not in meta["request_body"]
+
+    def test_sensitive_post_parameters_are_masked(self):
+        request = self.factory.post(
+            "/pay/", "pin=1234&amount=5", content_type="application/x-www-form-urlencoded"
+        )
+        request.sensitive_post_parameters = ["pin"]
+        body = json.loads(self._record(request)["request_body"])
+        assert body == {"pin": "***REDACTED***", "amount": "5"}
+
+    def test_sensitive_post_parameters_all_omits_the_body(self):
+        request = self.factory.post(
+            "/pay/", "pin=1234", content_type="application/x-www-form-urlencoded"
+        )
+        request.sensitive_post_parameters = "__ALL__"
+        meta = self._record(request)
+        assert "1234" not in meta["request_body"]
+        assert meta["request_body_format"] == "omitted"
+
+    def test_binary_request_body_is_summarised(self):
+        request = self.factory.post("/img/", b"\x89PNG\r\n\x1a\n\x00\xff", content_type="image/png")
+        meta = self._record(request)
+        assert meta["request_body"] == "[binary body: 10 bytes, image/png]"
+        assert meta["request_body_format"] == "binary"
+
+    def test_binary_response_body_is_summarised(self):
+        response = HttpResponse(b"%PDF-1.7\x00\xff", content_type="application/pdf")
+        meta = self._record(self.factory.get("/doc/"), response)
+        assert meta["response_body"] == "[binary body: 10 bytes, application/pdf]"
+
+    def test_json_response_token_is_masked(self):
+        response = HttpResponse(
+            json.dumps({"access_token": "secret-value"}), content_type="application/json"
+        )
+        meta = self._record(self.factory.post("/token/"), response)
+        assert "secret-value" not in meta["response_body"]
+
+    def test_streaming_response_is_not_consumed(self):
+        from django.http import StreamingHttpResponse
+
+        response = StreamingHttpResponse(iter([b"a", b"b"]))
+        meta = self._record(self.factory.get("/s/"), response)
+        assert meta["response_body_format"] == "streaming"
+        assert b"".join(response.streaming_content) == b"ab"
+
+    @override_settings(DJANGO_INSPECTOR={"MAX_BODY_SIZE": 20})
+    def test_structured_bodies_are_truncated_after_masking(self):
+        request = self.factory.post(
+            "/x/", json.dumps({"password": "p", "notes": "x" * 100}),
+            content_type="application/json",
+        )
+        meta = self._record(request)
+        assert len(meta["request_body"].encode()) <= 20
+        assert meta["request_body_truncated"] is True
+        assert meta["request_body"].startswith('{"password": "***')
+
+    def test_full_url_query_string_is_masked(self):
+        meta = self._record(self.factory.get("/cb/?token=abc123&page=2"))
+        assert "abc123" not in meta["full_url"]
+        assert meta["full_url"] == "http://testserver/cb/?token=***REDACTED***&page=2"
+
+    def test_disallowed_host_still_records_the_request(self):
+        meta = self._record(self.factory.get("/x/?a=1", HTTP_HOST="evil.example"))
+        assert meta["full_url"] == "/x/?a=1"
+        assert meta["path"] == "/x/"

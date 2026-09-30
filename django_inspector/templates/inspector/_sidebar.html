@@ -1,3 +1,4 @@
+{% load inspector_tags %}
 <aside class="inspector-sidebar">
     <div class="inspector-sidebar-title">&#128269; Inspector</div>
     <nav class="inspector-sidebar-nav">
@@ -13,10 +14,26 @@
            class="inspector-sidebar-link {% if request.resolver_match.url_name == 'queries-list' or request.resolver_match.url_name == 'query-detail' %}inspector-sidebar-link--active{% endif %}">
             Queries
         </a>
+        <a href="{% url 'inspector:cache-list' %}"
+           class="inspector-sidebar-link {% if request.resolver_match.url_name == 'cache-list' or request.resolver_match.url_name == 'cache-detail' %}inspector-sidebar-link--active{% endif %}">
+            Cache
+        </a>
+        <a href="{% url 'inspector:templates-list' %}"
+           class="inspector-sidebar-link {% if request.resolver_match.url_name == 'templates-list' or request.resolver_match.url_name == 'template-detail' %}inspector-sidebar-link--active{% endif %}">
+            Templates
+        </a>
+        <a href="{% url 'inspector:logs-list' %}"
+           class="inspector-sidebar-link {% if request.resolver_match.url_name == 'logs-list' or request.resolver_match.url_name == 'log-detail' %}inspector-sidebar-link--active{% endif %}">
+            Logs
+        </a>
+        <a href="{% url 'inspector:signals-list' %}"
+           class="inspector-sidebar-link {% if request.resolver_match.url_name == 'signals-list' or request.resolver_match.url_name == 'signal-detail' %}inspector-sidebar-link--active{% endif %}">
+            Signals
+        </a>
         <a href="{% url 'inspector:exceptions-list' %}"
            class="inspector-sidebar-link {% if request.resolver_match.url_name == 'exceptions-list' or request.resolver_match.url_name == 'exception-detail' %}inspector-sidebar-link--active{% endif %}">
             Exceptions
         </a>
     </nav>
-    <div class="inspector-sidebar-version">v0.1.0</div>
+    <div class="inspector-sidebar-version">v{% inspector_version %}</div>
 </aside>

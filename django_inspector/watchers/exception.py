@@ -5,16 +5,38 @@ local variables, and chained exception chains.
 Requirements: EXC-01..EXC-04
 """
 
-import sys
 import logging
+import sys
 import traceback
+from itertools import islice
+from typing import List
 
 from django.core.signals import got_request_exception
+from django.views.debug import SafeExceptionReporterFilter
 
 from django_inspector.watchers.base import BaseWatcher
 from django_inspector.watchers.registry import register
 
 logger = logging.getLogger("django_inspector")
+
+MAX_FRAMES = 50          # innermost frames kept per exception
+MAX_CHAIN = 10           # chained exceptions kept
+MAX_VALUE_LENGTH = 200   # characters of each local's repr
+MAX_CONTAINER_ITEMS = 50  # items of a dict/list/tuple local masked and shown
+
+
+class _FrameFilter(SafeExceptionReporterFilter):
+    """
+    Django's own filter, always active: honours @sensitive_variables and
+    @sensitive_post_parameters even when DEBUG is True (Django's debug page
+    skips them then, but inspector events are stored and shown later).
+    """
+
+    def is_active(self, request):
+        return True
+
+
+_frame_filter = _FrameFilter()
 
 
 class ExceptionWatcher(BaseWatcher):
@@ -49,16 +71,21 @@ class ExceptionWatcher(BaseWatcher):
         if should_ignore_exception(exc_value):
             return
 
+        frames, omitted = _extract_frames(exc_tb, request)
         metadata = {
-            # EXC-01: type, message, full stack trace
+            # EXC-01: type, message, stack trace (innermost MAX_FRAMES frames)
             "exception_type": f"{exc_type.__module__}.{exc_type.__qualname__}",
             "exception_message": str(exc_value),
-            "stack_trace": traceback.format_exception(exc_type, exc_value, exc_tb),
+            "stack_trace": traceback.format_exception(
+                exc_type, exc_value, exc_tb, limit=-MAX_FRAMES, chain=False
+            ),
             # EXC-02: locals at each frame
-            "frames": _extract_frames(exc_tb),
+            "frames": frames,
             # EXC-03: chained exceptions
             "chained_exceptions": _extract_chain(exc_value),
         }
+        if omitted:
+            metadata["frames_omitted"] = omitted
 
         # Add request context if available
         if request is not None:
@@ -68,45 +95,74 @@ class ExceptionWatcher(BaseWatcher):
         self.record("exception.raised", metadata)
 
 
-def _extract_frames(tb) -> list:
+def _extract_frames(tb, request=None):
     """
-    Extract stack frames from a traceback, including local variables
-    at each frame (EXC-02).
+    Return (frames, omitted): the innermost MAX_FRAMES stack frames with their
+    local variables (EXC-02), and how many outer frames were left out.
     """
+    tbs = []
+    while tb is not None:
+        tbs.append(tb)
+        tb = tb.tb_next
+    omitted = max(0, len(tbs) - MAX_FRAMES)
     frames = []
-    current = tb
-    while current is not None:
+    for current in tbs[omitted:]:
         frame = current.tb_frame
-        frame_info = {
+        frames.append({
             "file": frame.f_code.co_filename,
             "line": current.tb_lineno,
             "function": frame.f_code.co_name,
-            "locals": _safe_locals(frame.f_locals),
-        }
-        frames.append(frame_info)
-        current = current.tb_next
-    return frames
+            "locals": _safe_locals(_frame_variables(request, frame)),
+        })
+    return frames, omitted
+
+
+def _frame_variables(request, frame) -> dict:
+    """Locals with @sensitive_variables values replaced by Django's stars."""
+    try:
+        return dict(_frame_filter.get_traceback_frame_variables(request, frame))
+    except Exception:
+        logger.debug("inspector: could not filter frame variables", exc_info=True)
+        return dict(frame.f_locals)
 
 
 def _safe_locals(local_vars: dict) -> dict:
     """
-    Convert local variables to safe, serializable representations.
-    Truncate long values, skip unserializable objects.
+    Convert local variables to short, masked string representations.
+    Containers are masked before repr, so a secret nested in a dict local is
+    redacted like any other event field.
     """
-    MAX_VALUE_LENGTH = 200
     safe = {}
     for key, value in local_vars.items():
-        # Skip dunder and private Django internals
         if key.startswith("__") and key.endswith("__"):
             continue
-        try:
-            val_str = repr(value)
-            if len(val_str) > MAX_VALUE_LENGTH:
-                val_str = val_str[:MAX_VALUE_LENGTH] + "..."
-            safe[key] = val_str
-        except Exception:
-            safe[key] = "<unrepresentable>"
+        safe[key] = _safe_repr(value)
     return safe
+
+
+def _safe_repr(value) -> str:
+    from django.db.models.query import QuerySet
+
+    from django_inspector.masking import mask_value
+
+    try:
+        if isinstance(value, QuerySet) and value._result_cache is None:
+            # repr() would run the query, maybe inside a broken transaction.
+            return "<unevaluated QuerySet: %s>" % value.model._meta.label
+        if isinstance(value, tuple) and hasattr(value, "_asdict"):
+            value = value._asdict()  # namedtuple: mask by field name
+        if isinstance(value, dict):
+            value = mask_value(dict(islice(value.items(), MAX_CONTAINER_ITEMS)))
+        elif isinstance(value, list):
+            value = mask_value(list(islice(value, MAX_CONTAINER_ITEMS)))
+        elif isinstance(value, tuple):
+            value = mask_value(tuple(islice(value, MAX_CONTAINER_ITEMS)))
+        text = repr(value)
+    except Exception:
+        return "<unrepresentable>"
+    if len(text) > MAX_VALUE_LENGTH:
+        text = text[:MAX_VALUE_LENGTH] + "..."
+    return text
 
 
 def _extract_chain(exc: BaseException) -> list:
@@ -114,7 +170,7 @@ def _extract_chain(exc: BaseException) -> list:
     Extract chained exceptions — __cause__ (explicit chaining via `raise ... from`)
     and __context__ (implicit chaining) — EXC-03.
     """
-    chain = []
+    chain: List[dict] = []
     seen = set()
     current = exc
 
@@ -128,8 +184,8 @@ def _extract_chain(exc: BaseException) -> list:
             break
 
         exc_id = id(next_exc)
-        if exc_id in seen:
-            break  # Avoid infinite loops
+        if exc_id in seen or len(chain) >= MAX_CHAIN:
+            break  # Avoid infinite loops and unbounded chains
         seen.add(exc_id)
 
         chain_type = "cause" if cause is not None else "context"
@@ -138,7 +194,8 @@ def _extract_chain(exc: BaseException) -> list:
             "message": str(next_exc),
             "chain_type": chain_type,
             "stack_trace": traceback.format_exception(
-                type(next_exc), next_exc, next_exc.__traceback__
+                type(next_exc), next_exc, next_exc.__traceback__,
+                limit=-MAX_FRAMES, chain=False,
             ),
         })
 

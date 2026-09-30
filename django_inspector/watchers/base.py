@@ -12,6 +12,7 @@ import abc
 import logging
 
 from django_inspector.conf import inspector_settings
+from django_inspector.sampling import LIGHT_WATCHERS, detail_enabled
 from django_inspector.tracing.context import get_current_trace_id
 
 logger = logging.getLogger("django_inspector")
@@ -58,7 +59,16 @@ class BaseWatcher(abc.ABC):
         self._enabled = False
         logger.debug("django-inspector: %s watcher disabled", self.watcher_name)
 
-    def record(self, event_type: str, metadata: dict) -> None:
+    def is_capturing(self) -> bool:
+        """
+        Cheap check for hooks to call before doing any work: enabled, inside a
+        trace, and (for detailed watchers) picked by early sampling.
+        """
+        if not self._enabled or get_current_trace_id() is None:
+            return False
+        return self.watcher_name in LIGHT_WATCHERS or detail_enabled()
+
+    def record(self, event_type: str, metadata: dict, timestamp=None) -> None:
         """
         Buffer a watcher event for the current request trace.
 
@@ -66,6 +76,7 @@ class BaseWatcher(abc.ABC):
             event_type: Dotted string, e.g. "sql.query". Conventionally
                         "{watcher_name}.{event_kind}".
             metadata:   Dict of event-specific data. Must be JSON-serializable.
+            timestamp:  When the event happened; defaults to now.
         """
         if not self._enabled:
             return
@@ -77,16 +88,28 @@ class BaseWatcher(abc.ABC):
         if trace_id is None:
             return
 
+        if self.watcher_name not in LIGHT_WATCHERS and not detail_enabled():
+            return  # early sampling didn't pick this request
+
         from django_inspector.masking import mask_metadata
         from django_inspector.storage.flush import buffer_event
 
         try:
             masked = mask_metadata(metadata)
-        except Exception:
-            logger.warning("inspector: masking failed, recording unmasked event", exc_info=True)
-            masked = metadata
+        except Exception as exc:
+            # MASK-05: fail closed. Unmasked data never reaches the buffer; a
+            # placeholder keeps the event visible in its trace. Only the
+            # exception type is kept, since its message could contain the data.
+            if inspector_settings.INSPECTOR_RAISE_ERRORS:
+                raise
+            logger.warning(
+                "inspector: masking failed for a %s event; stored a placeholder instead",
+                event_type,
+                exc_info=True,
+            )
+            masked = {"masking_failed": True, "error_type": type(exc).__name__}
 
-        buffer_event(trace_id=trace_id, event_type=event_type, metadata=masked)
+        buffer_event(trace_id=trace_id, event_type=event_type, metadata=masked, timestamp=timestamp)
 
     @abc.abstractmethod
     def install_hooks(self) -> None:

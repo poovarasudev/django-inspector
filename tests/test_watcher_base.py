@@ -48,8 +48,8 @@ def test_watcher_enable_idempotent():
 
 
 def test_watcher_record_no_trace_does_nothing():
+    from django_inspector.storage.flush import _get_buffer, clear_buffer
     from django_inspector.tracing.context import clear_trace_id
-    from django_inspector.storage.flush import clear_buffer, _get_buffer
 
     clear_trace_id()
     clear_buffer()
@@ -60,8 +60,8 @@ def test_watcher_record_no_trace_does_nothing():
 
 
 def test_watcher_record_with_trace_buffers_event():
-    from django_inspector.tracing.context import set_trace_id, clear_trace_id
-    from django_inspector.storage.flush import clear_buffer, _get_buffer
+    from django_inspector.storage.flush import _get_buffer, clear_buffer
+    from django_inspector.tracing.context import clear_trace_id, set_trace_id
 
     clear_buffer()
     token = set_trace_id("abc123def456" + "0" * 20)

@@ -24,7 +24,7 @@ The request watcher captures request bodies, response bodies, headers, cookies, 
 - PRD §14 explicitly lists masking as required. The `SENSITIVE_KEYS` setting referenced in PRD §16 is not implemented in `conf.py`.
 - **Mitigation (v1.1):** masking module that runs on metadata before `buffer_event`. Default sensitive keys: `password`, `token`, `secret`, `authorization`, `cookie`, `csrfmiddlewaretoken`, `api_key`, `*-key`, regex for card-shaped strings.
 
-### C-3. No sampling — every event is recorded
+### C-3. No sampling — every event is recorded — resolved in v1.1 (end-of-request sampling; `EARLY_SAMPLING` decides at entry)
 
 Every request, every query, every exception lands in the DB. Production traffic at >100 req/s will fill the table and the per-request `bulk_create` becomes a meaningful synchronous cost.
 
@@ -49,7 +49,7 @@ Every request, every query, every exception lands in the DB. Production traffic 
 
 ## MEDIUM — Correctness / Quality
 
-### C-6. Retention is manual
+### C-6. Retention is manual — resolved in 0.2.0 (`RETENTION_HOURS`, batched `inspector_cleanup`)
 
 Only `inspector_cleanup --hours N` exists, and it has to be run by hand. No scheduled cleanup, no count-based or size-based caps. PRD §15 wants all three.
 
@@ -63,19 +63,19 @@ Only `inspector_cleanup --hours N` exists, and it has to be run by hand. No sche
 - PRD §15 says "async persistence; offload event writes". Not implemented.
 - **Mitigation (v1.2):** optional thread pool or Celery offload behind a setting.
 
-### C-8. O(N) watcher lookup on every request
+### C-8. O(N) watcher lookup on every request — resolved in 0.2.0 (`registry.get_instance()`)
 
 `@/Users/poovarasu/Arasu/projects/django/django-inspector/django_inspector/middleware.py:51-80` re-imports modules and linear-scans `_watcher_instances` to find the `RequestWatcher` on every request — twice per request (start + end).
 
 - **Mitigation:** stash watcher instances by name on the AppConfig (`app._watcher_by_name`) and look up O(1).
 
-### C-9. SQL origin extraction is full-stack walk per query
+### C-9. SQL origin extraction is full-stack walk per query — resolved in 0.2.0 (`sys._getframe()` walk, memoised per file)
 
 `@/Users/poovarasu/Arasu/projects/django/django-inspector/django_inspector/watchers/sql.py:167-196` calls `traceback.extract_stack()` for every query, then iterates skip patterns. Under high query volume this becomes measurable.
 
 - **Mitigation:** use `sys._getframe()` and walk manually with early-exit; cache skip patterns as a compiled set.
 
-### C-10. JSONField filters in dashboard
+### C-10. JSONField filters in dashboard — partly resolved in 0.2.0 (`(event_type, -timestamp)` index, capped counts); columns still v1.2
 
 `@/Users/poovarasu/Arasu/projects/django/django-inspector/django_inspector/dashboard/views.py:27-43` filters by `metadata__method`, `metadata__status_code__gte`, etc. Works on SQLite/PostgreSQL; on MySQL these are unindexed JSON path lookups and slow.
 

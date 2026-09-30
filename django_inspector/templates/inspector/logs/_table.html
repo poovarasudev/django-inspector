@@ -1,0 +1,29 @@
+<table class="inspector-table">
+    <thead>
+        <tr>
+            <th>Level</th>
+            <th>Message</th>
+            <th>Logger</th>
+            <th>Source</th>
+            <th>Time</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for event in page.object_list %}
+        <tr>
+            <td><span class="inspector-indicator inspector-indicator--{{ event.metadata.level_name|lower }}">{{ event.metadata.level_name }}</span></td>
+            <td>
+                <a href="{% url 'inspector:log-detail' event.pk %}">{{ event.metadata.message|truncatechars:100 }}</a>
+                {% if event.metadata.exception_type %}<span class="inspector-exc-badge">{{ event.metadata.exception_type }}</span>{% endif %}
+            </td>
+            <td class="inspector-code-inline">{{ event.metadata.logger }}</td>
+            <td style="font-size: 12px;">{{ event.metadata.file|default:"" }}:{{ event.metadata.line|default:"" }}</td>
+            <td>{{ event.timestamp|timesince }} ago</td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="5" style="text-align: center; padding: 40px; color: var(--ins-text-secondary);">No log records found.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

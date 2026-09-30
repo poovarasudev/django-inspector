@@ -86,6 +86,25 @@ class TestIPAllowlist(TestCase):
         request = _make_request(user=user_anon, remote_addr="10.0.0.1")
         assert not can_access_dashboard(request)
 
+    @override_settings(DJANGO_INSPECTOR={"INSPECTOR_DASHBOARD_IP_ALLOWLIST": ["10.0.0.0/8"]})
+    def test_spoofed_x_forwarded_for_does_not_pass_the_allowlist(self):
+        from django_inspector.dashboard.auth import _ip_allowed
+        request = RequestFactory(
+            REMOTE_ADDR="203.0.113.9", HTTP_X_FORWARDED_FOR="10.0.0.1"
+        ).get("/inspector/")
+        assert _ip_allowed(request) is False
+
+    @override_settings(DJANGO_INSPECTOR={
+        "INSPECTOR_DASHBOARD_IP_ALLOWLIST": ["10.0.0.0/8"],
+        "TRUSTED_PROXY_COUNT": 1,
+    })
+    def test_x_forwarded_for_is_used_behind_a_trusted_proxy(self):
+        from django_inspector.dashboard.auth import _ip_allowed
+        request = RequestFactory(
+            REMOTE_ADDR="172.16.0.2", HTTP_X_FORWARDED_FOR="10.0.0.1"
+        ).get("/inspector/")
+        assert _ip_allowed(request) is True
+
     @override_settings(DJANGO_INSPECTOR={"INSPECTOR_DASHBOARD_IP_ALLOWLIST": []})
     def test_empty_allowlist_does_not_block_by_ip(self):
         from django_inspector.dashboard.auth import _ip_allowed

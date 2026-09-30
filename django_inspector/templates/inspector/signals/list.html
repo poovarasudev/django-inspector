@@ -1,0 +1,33 @@
+{% extends "inspector/base.html" %}
+{% block title %}Signals — Inspector{% endblock %}
+{% block content %}
+<div class="inspector-page-header">
+    <h1>Signals</h1>
+</div>
+
+<form class="inspector-filter-bar"
+      hx-get="{% url 'inspector:signals-list' %}"
+      hx-target="#results-table"
+      hx-push-url="true"
+      hx-trigger="change, keyup changed delay:300ms from:input[name=sender]">
+    <label>
+        Signal
+        <select name="signal">
+            <option value="">All</option>
+            {% for s in signals %}
+            <option value="{{ s }}" {% if filters.signal == s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>
+        Sender
+        <input type="search" name="sender" value="{{ filters.sender|default:'' }}" placeholder="contains…">
+    </label>
+</form>
+
+<div id="results-table">
+    {% include "inspector/signals/_table.html" %}
+</div>
+
+{% include "inspector/_pagination.html" %}
+{% endblock %}
