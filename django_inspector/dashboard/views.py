@@ -9,7 +9,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.functional import cached_property
-from django.views.decorators.csrf import csrf_protect
+from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
 from django_inspector.conf import inspector_settings
@@ -123,6 +123,9 @@ def requests_list(request):
     return render(request, "inspector/requests/list.html", context)
 
 
+# The pin button posts a CSRF token; set the cookie here so it works even
+# when the host project doesn't run CsrfViewMiddleware.
+@ensure_csrf_cookie
 def request_detail(request, pk):
     event = get_object_or_404(Event, pk=pk, event_type="request.completed")
     trace_events = list(

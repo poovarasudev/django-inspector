@@ -344,6 +344,24 @@ class TestPinning(DashboardClient):
         assert response.status_code == 403
         assert not Event.objects.filter(trace_id=TRACE, pinned=True).exists()
 
+    @override_settings(
+        DJANGO_INSPECTOR={"INSPECTOR_DASHBOARD_PERMISSION": "tests.test_dashboard_features._always_allowed"}
+    )
+    def test_pin_button_works_without_csrfviewmiddleware(self):
+        from django.test import Client
+
+        # The detail page must set the CSRF cookie itself: without
+        # CsrfViewMiddleware nothing else would, and the button's token
+        # would be rejected.
+        c = Client(enforce_csrf_checks=True)
+        c.get(reverse("inspector:request-detail", args=[self.event.pk]))
+        token = c.cookies["csrftoken"].value
+        response = c.post(
+            reverse("inspector:trace-pin", args=[TRACE]), {"pinned": "1"}, HTTP_X_CSRFTOKEN=token
+        )
+        assert response.status_code == 200
+        assert Event.objects.filter(trace_id=TRACE, pinned=True).exists()
+
     def test_pinned_badge_and_button_show_on_the_detail_page(self):
         body = self.body("request-detail", self.event.pk)
         assert "Pin trace" in body
