@@ -71,3 +71,22 @@ def invalidate_ignore_caches() -> None:
     """Clear compiled pattern caches. Call after override_settings in tests."""
     _get_path_patterns_key.cache_clear()
     _compiled_exception_classes.cache_clear()
+
+
+def is_dashboard_path(path: str) -> bool:
+    """
+    Return True if ``path`` is under DASHBOARD_URL_PREFIX.
+
+    The middleware skips tracing for these paths so the dashboard's own SQL,
+    template and cache activity never becomes events. The prefix must match
+    where the host mounts ``django_inspector.dashboard.urls``. An empty or "/"
+    prefix matches nothing: treating the whole site as the dashboard would
+    silently switch the inspector off.
+    """
+    from django_inspector.conf import inspector_settings
+
+    prefix = (inspector_settings.DASHBOARD_URL_PREFIX or "").strip("/")
+    if not prefix:
+        return False
+    prefix = "/" + prefix
+    return path == prefix or path.startswith(prefix + "/")

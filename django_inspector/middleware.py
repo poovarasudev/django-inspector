@@ -38,8 +38,8 @@ class InspectorMiddleware:
         if not inspector_settings.is_enabled:
             return self.get_response(request)
 
-        from django_inspector.ignores import should_ignore_path
-        if should_ignore_path(request.path):
+        from django_inspector.ignores import is_dashboard_path, should_ignore_path
+        if should_ignore_path(request.path) or is_dashboard_path(request.path):
             return self.get_response(request)
 
         trace_id = generate_trace_id()

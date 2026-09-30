@@ -38,12 +38,9 @@ class RequestWatcher(BaseWatcher):
 
     def should_ignore_request(self, request) -> bool:
         """Return True if this request should not be recorded (REQ-06)."""
-        path = getattr(request, "path", "")
-        prefix = inspector_settings.DASHBOARD_URL_PREFIX
-        # Normalize: ensure both have leading slash for comparison
-        if not prefix.startswith("/"):
-            prefix = "/" + prefix
-        return path.startswith(prefix)
+        from django_inspector.ignores import is_dashboard_path
+
+        return is_dashboard_path(getattr(request, "path", ""))
 
     def on_request(self, request):
         """Called by middleware at start of request. Stores start time."""

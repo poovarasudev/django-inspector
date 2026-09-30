@@ -10,6 +10,7 @@ from django.test import RequestFactory, TestCase, override_settings
 
 from django_inspector.ignores import (
     invalidate_ignore_caches,
+    is_dashboard_path,
     should_ignore_exception,
     should_ignore_path,
 )
@@ -118,3 +119,57 @@ class TestIgnorePathsMiddlewareIntegration(TestCase):
         Event.objects.all().delete()
         self._run_middleware("/api/users/", ["/healthz"])
         assert Event.objects.count() > 0
+
+
+class TestIsDashboardPath:
+    @override_settings(DJANGO_INSPECTOR={"DASHBOARD_URL_PREFIX": "inspector/"})
+    def test_paths_under_prefix_match(self):
+        assert is_dashboard_path("/inspector/") is True
+        assert is_dashboard_path("/inspector/queries/12/") is True
+        assert is_dashboard_path("/inspector") is True
+
+    @override_settings(DJANGO_INSPECTOR={"DASHBOARD_URL_PREFIX": "inspector/"})
+    def test_lookalike_paths_do_not_match(self):
+        assert is_dashboard_path("/inspectors-guide/") is False
+        assert is_dashboard_path("/api/inspector/") is False
+
+    @override_settings(DJANGO_INSPECTOR={"DASHBOARD_URL_PREFIX": "/ops/inspector"})
+    def test_prefix_slashes_are_normalised(self):
+        assert is_dashboard_path("/ops/inspector/requests/") is True
+
+    @pytest.mark.parametrize("prefix", ["", "/"])
+    def test_empty_prefix_matches_nothing(self, prefix):
+        with override_settings(DJANGO_INSPECTOR={"DASHBOARD_URL_PREFIX": prefix}):
+            assert is_dashboard_path("/") is False
+            assert is_dashboard_path("/api/users/") is False
+
+
+@pytest.mark.django_db
+class TestDashboardPathsAreNotTraced(TestCase):
+    """The dashboard's own SQL/template/cache activity must never become events."""
+
+    def _run(self, path):
+        from django.db import connection
+        from django_inspector.middleware import InspectorMiddleware
+
+        request = RequestFactory().get(path)
+
+        def view(req):
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+            return HttpResponse("ok")
+
+        InspectorMiddleware(view)(request)
+        return request
+
+    def test_dashboard_request_produces_no_events(self):
+        Event.objects.all().delete()
+        request = self._run("/inspector/queries/")
+        assert not hasattr(request, "inspector_trace_id")
+        assert Event.objects.count() == 0
+
+    def test_lookalike_path_is_still_traced(self):
+        Event.objects.all().delete()
+        request = self._run("/inspectors-guide/")
+        assert hasattr(request, "inspector_trace_id")
+        assert Event.objects.filter(event_type="request.completed").exists()
