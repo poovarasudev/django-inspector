@@ -253,6 +253,7 @@ Work items:
 **Goal**: See every email the app sends, as it would arrive.
 **Depends on**: Phase 9
 **Requirements**: MAIL-01..03
+**Spec**: [2026-09-30-email-watcher-design.md](superpowers/specs/2026-09-30-email-watcher-design.md)
 **Success Criteria** (what must be TRUE):
   1. Sending mail during a trace records a `mail.sent` event with recipients, subject, bodies, backend and attachment names/sizes.
   2. The dashboard previews the HTML body with scripts and remote content blocked, and downloads the message as `.eml`.
