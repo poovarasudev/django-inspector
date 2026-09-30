@@ -41,11 +41,20 @@ def mask_metadata(metadata: dict) -> dict:
     - MASK-06: Nested dicts/lists are walked, depth-capped at 10.
     (MASK-05, masking before buffering and failing closed, lives in BaseWatcher.record.)
     """
+    return mask_value(metadata)
+
+
+def mask_value(obj, extra_keys=()):
+    """
+    Mask any value the way mask_metadata masks an event: dict keys in the
+    sensitive list (plus ``extra_keys``) are redacted, and strings holding a
+    card number or a JWT are redacted. Used by watchers that must mask a
+    payload before serialising it (request bodies, exception locals).
+    """
     from django_inspector.conf import inspector_settings
-    extra = inspector_settings.SENSITIVE_KEYS or []
-    extra_keys = frozenset(k.lower() for k in extra)
-    all_keys = _BUILTIN_SENSITIVE_KEYS | extra_keys
-    return _walk(metadata, all_keys, depth=0)
+    extra = list(inspector_settings.SENSITIVE_KEYS or []) + list(extra_keys)
+    all_keys = _BUILTIN_SENSITIVE_KEYS | frozenset(str(k).lower() for k in extra)
+    return _walk(obj, all_keys, depth=0)
 
 
 def _walk(obj, sensitive_keys: frozenset, depth: int):

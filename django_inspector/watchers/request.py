@@ -5,9 +5,13 @@ non-inspector request and stores it as a trace-correlated event.
 Requirements: REQ-01..REQ-06
 """
 
-import time
+import json
 import logging
-from typing import Optional
+import time
+from typing import Optional, Tuple
+from urllib.parse import urlencode
+
+from django.http import QueryDict
 
 from django_inspector.client_ip import get_client_ip
 from django_inspector.conf import inspector_settings
@@ -67,7 +71,7 @@ class RequestWatcher(BaseWatcher):
         metadata = {
             "method": request.method,
             "path": request.path,
-            "full_url": request.build_absolute_uri(),
+            "full_url": _full_url(request),
             "query_params": dict(request.GET),
         }
 
@@ -75,9 +79,9 @@ class RequestWatcher(BaseWatcher):
         metadata["request_headers"] = _extract_headers(request.META)
         metadata["response_headers"] = dict(response.items()) if response else {}
 
-        # REQ-03: request and response body (truncated)
-        metadata["request_body"] = _safe_body(request, max_body)
-        metadata["response_body"] = _safe_response_body(response, max_body)
+        # REQ-03: request and response body (masked, then truncated)
+        _add_body(metadata, "request", _request_body(request), max_body)
+        _add_body(metadata, "response", _response_body(response), max_body)
 
         # REQ-04: status code and latency
         metadata["status_code"] = getattr(response, "status_code", None)
@@ -104,34 +108,118 @@ def _extract_headers(meta: dict) -> dict:
     return headers
 
 
-def _safe_body(request, max_size: int) -> str:
-    """Read request body, truncate to max_size bytes."""
+# Bodies are masked before they are serialised: key-based masking can't see
+# inside a raw body string, so form and JSON bodies are parsed first.
+_TEXT_SUBTYPES = ("json", "xml", "javascript", "graphql", "yaml", "csv")
+
+
+def _full_url(request) -> str:
+    """The absolute URL with sensitive query parameters masked."""
+    from django_inspector.masking import mask_value
+
     try:
-        body = request.body
-        if isinstance(body, bytes):
-            body = body[:max_size].decode("utf-8", errors="replace")
-        else:
-            body = str(body)[:max_size]
-        return body
+        url = request.build_absolute_uri(request.path)
+    except Exception:
+        # DisallowedHost: the host isn't in ALLOWED_HOSTS. Keep the request event.
+        url = request.path
+    if not request.GET:
+        return url
+    params = mask_value({key: request.GET.getlist(key) for key in request.GET})
+    return url + "?" + urlencode(params, doseq=True, safe="*")
+
+
+def _request_body(request) -> Tuple[str, object]:
+    """(format, payload) for the request body; see _add_body."""
+    sensitive = getattr(request, "sensitive_post_parameters", None)
+    if sensitive == "__ALL__":
+        return "omitted", "[omitted: sensitive_post_parameters]"
+    extra_keys = list(sensitive or [])
+    content_type = (getattr(request, "content_type", None) or "").lower()
+    if content_type.startswith("multipart/"):
+        return _multipart_payload(request, extra_keys)
+    try:
+        raw = request.body
     except Exception:
         logger.debug("inspector: could not read request body", exc_info=True)
-        return ""
+        return "unreadable", "[request body not readable]"
+    return _payload(raw, content_type, extra_keys)
 
 
-def _safe_response_body(response, max_size: int) -> str:
-    """Read response content, truncate to max_size bytes."""
+def _response_body(response) -> Tuple[str, object]:
+    """(format, payload) for the response body; streaming bodies are never consumed."""
+    if response is None:
+        return "empty", ""
+    if getattr(response, "streaming", False):
+        return "streaming", "[streaming response not captured]"
     try:
-        if not hasattr(response, "content"):
-            return ""
-        content = response.content
-        if isinstance(content, bytes):
-            content = content[:max_size].decode("utf-8", errors="replace")
-        else:
-            content = str(content)[:max_size]
-        return content
+        raw = response.content
     except Exception:
         logger.debug("inspector: could not read response body", exc_info=True)
-        return ""
+        return "unreadable", "[response body not readable]"
+    content_type = (response.get("Content-Type") or "").lower()
+    return _payload(raw, content_type, [])
+
+
+def _multipart_payload(request, extra_keys) -> Tuple[str, object]:
+    """
+    Form fields and file summaries, but only when the view already parsed the
+    body: parsing it here would read (and maybe spool) every upload.
+    """
+    if not hasattr(request, "_post"):
+        return "multipart", "[multipart body not parsed by the view; not captured]"
+    fields = {key: _single_or_list(request.POST.getlist(key)) for key in request.POST}
+    files = {
+        key: ["%s (%s bytes)" % (f.name, f.size) for f in request.FILES.getlist(key)]
+        for key in request.FILES
+    }
+    return "multipart", _masked({"fields": fields, "files": files}, extra_keys)
+
+
+def _payload(raw, content_type, extra_keys) -> Tuple[str, object]:
+    if isinstance(raw, str):
+        raw = raw.encode("utf-8")
+    if not raw:
+        return "empty", ""
+    mime = content_type.split(";")[0].strip()
+    if mime == "application/x-www-form-urlencoded":
+        form = QueryDict(raw)
+        return "form", _masked({key: _single_or_list(form.getlist(key)) for key in form}, extra_keys)
+    if mime == "application/json" or mime.endswith("+json"):
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            return "unparseable", "[unparseable JSON body: %d bytes]" % len(raw)
+        return "json", _masked(data, extra_keys)
+    if mime.startswith("text/") or any(sub in mime for sub in _TEXT_SUBTYPES):
+        return "text", raw.decode("utf-8", errors="replace")
+    if not mime:
+        try:
+            return "text", raw.decode("utf-8")
+        except UnicodeDecodeError:
+            pass
+    return "binary", "[binary body: %d bytes, %s]" % (len(raw), mime or "no content type")
+
+
+def _masked(data, extra_keys):
+    """Mask ``data``, then serialise it: truncating afterwards can't expose a secret."""
+    from django_inspector.masking import mask_value
+
+    return json.dumps(mask_value(data, extra_keys), ensure_ascii=False, default=str)
+
+
+def _single_or_list(values):
+    return values[0] if len(values) == 1 else values
+
+
+def _add_body(metadata, prefix, body, max_size):
+    """Store ``<prefix>_body`` truncated to max_size bytes, with its format."""
+    body_format, text = body
+    encoded = text.encode("utf-8")
+    if len(encoded) > max_size:
+        text = encoded[:max_size].decode("utf-8", errors="ignore")
+        metadata[prefix + "_body_truncated"] = True
+    metadata[prefix + "_body"] = text
+    metadata[prefix + "_body_format"] = body_format
 
 
 def _get_user_info(request) -> Optional[str]:
