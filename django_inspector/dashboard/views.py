@@ -1,6 +1,14 @@
+import datetime
+import os
+from functools import lru_cache
+
 from django.conf import settings
-from django.shortcuts import render, get_object_or_404
 from django.core.paginator import Paginator
+from django.http import Http404, HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from django.utils.dateparse import parse_date
+from django.utils.functional import cached_property
 
 from django_inspector.conf import inspector_settings
 from django_inspector.storage.models import Event
@@ -8,12 +16,71 @@ from django_inspector.watchers.cache import CACHE_EVENT_TYPES
 
 CACHE_OPERATIONS = [event_type.split(".", 1)[1] for event_type in CACHE_EVENT_TYPES]
 LOG_LEVELS = [(10, "DEBUG"), (20, "INFO"), (30, "WARNING"), (40, "ERROR"), (50, "CRITICAL")]
+PAGE_SIZE = 25
+MAX_DETAIL_EVENTS = 2000  # events shown on one request's page
+
+_ASSET_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
+_ASSET_TYPES = {
+    "htmx.min.js": "application/javascript",
+    "inspector.js": "application/javascript",
+    "inspector.css": "text/css",
+}
+
+
+class CappedPaginator(Paginator):
+    """
+    A paginator whose total is counted only up to ``max_count``: a COUNT(*)
+    over a large events table is slow, and nobody pages past 10,000 rows.
+    """
+
+    def __init__(self, object_list, per_page, max_count=10000, **kwargs):
+        super().__init__(object_list, per_page, **kwargs)
+        self.max_count = max_count
+        self.count_capped = False
+
+    @cached_property
+    def count(self):
+        counted = self.object_list[: self.max_count + 1].count()
+        self.count_capped = counted > self.max_count
+        return min(counted, self.max_count)
+
+
+def _paginate(request, qs):
+    return CappedPaginator(qs, PAGE_SIZE).get_page(request.GET.get("page", 1))
+
+
+def _day_start(value, days_later=0):
+    """Start of the given YYYY-MM-DD day (plus ``days_later``), or None if invalid."""
+    try:
+        day = parse_date(value or "")
+    except ValueError:  # well-formed but impossible, e.g. 2026-02-30
+        return None
+    if day is None:
+        return None
+    start = datetime.datetime.combine(day + datetime.timedelta(days=days_later), datetime.time.min)
+    if settings.USE_TZ:
+        start = timezone.make_aware(start)
+    return start
+
+
+def _filter_dates(request, qs):
+    """from_date/to_date filters; the to date includes that whole day. Invalid dates are ignored."""
+    start = _day_start(request.GET.get("from_date"))
+    if start is not None:
+        qs = qs.filter(timestamp__gte=start)
+    end = _day_start(request.GET.get("to_date"), days_later=1)
+    if end is not None:
+        qs = qs.filter(timestamp__lt=end)
+    return qs
+
+
+def _normalize_trace_id(value):
+    return (value or "").strip().lower().replace("-", "")
 
 
 def live_feed(request):
     qs = Event.objects.filter(event_type="request.completed").order_by("-timestamp")
-    paginator = Paginator(qs, 25)
-    page = paginator.get_page(request.GET.get("page", 1))
+    page = _paginate(request, qs)
 
     if request.headers.get("HX-Request"):
         return render(request, "inspector/_live_feed_table.html", {"page": page})
@@ -26,8 +93,7 @@ def requests_list(request):
     method = request.GET.get("method", "")
     status = request.GET.get("status", "")
     path = request.GET.get("path", "")
-    from_date = request.GET.get("from_date", "")
-    to_date = request.GET.get("to_date", "")
+    trace = _normalize_trace_id(request.GET.get("trace"))
 
     if method:
         qs = qs.filter(metadata__method=method)
@@ -43,13 +109,11 @@ def requests_list(request):
             qs = qs.filter(metadata__status_code__gte=low, metadata__status_code__lt=high)
     if path:
         qs = qs.filter(metadata__path__icontains=path)
-    if from_date:
-        qs = qs.filter(timestamp__gte=from_date)
-    if to_date:
-        qs = qs.filter(timestamp__lte=to_date)
+    if trace:
+        qs = qs.filter(trace_id=trace)
+    qs = _filter_dates(request, qs)
 
-    paginator = Paginator(qs, 25)
-    page = paginator.get_page(request.GET.get("page", 1))
+    page = _paginate(request, qs)
     context = {"page": page, "filters": request.GET}
 
     if request.headers.get("HX-Request"):
@@ -59,7 +123,11 @@ def requests_list(request):
 
 def request_detail(request, pk):
     event = get_object_or_404(Event, pk=pk, event_type="request.completed")
-    trace_events = Event.objects.filter(trace_id=event.trace_id).order_by("timestamp")
+    trace_events = list(
+        Event.objects.filter(trace_id=event.trace_id).order_by("timestamp", "id")[: MAX_DETAIL_EVENTS + 1]
+    )
+    trace_truncated = len(trace_events) > MAX_DETAIL_EVENTS
+    trace_events = trace_events[:MAX_DETAIL_EVENTS]
 
     queries = [e for e in trace_events if e.event_type == "sql.query"]
     exceptions = [e for e in trace_events if e.event_type == "exception.raised"]
@@ -113,8 +181,64 @@ def request_detail(request, pk):
         "cache_event_types": CACHE_EVENT_TYPES,
         "log_records": log_records,
         "signal_dispatches": signal_dispatches,
+        "trace_truncated": trace_truncated,
+        "max_detail_events": MAX_DETAIL_EVENTS,
     }
     return render(request, "inspector/requests/detail.html", context)
+
+
+def trace_detail(request, trace_id):
+    """/trace/<id>/: jump to the request page of a trace id (e.g. one found in your logs)."""
+    event = (
+        Event.objects.filter(trace_id=_normalize_trace_id(trace_id), event_type="request.completed")
+        .order_by("timestamp")
+        .first()
+    )
+    if event is None:
+        raise Http404("No request with that trace id.")
+    return redirect("inspector:request-detail", pk=event.pk)
+
+
+def request_export(request, pk):
+    """The request's whole trace as a JSON download."""
+    event = get_object_or_404(Event, pk=pk, event_type="request.completed")
+    events = Event.objects.filter(trace_id=event.trace_id).order_by("timestamp", "id")
+    data = {
+        "trace_id": event.trace_id,
+        "request_event_id": event.pk,
+        "events": [
+            {
+                "id": e.pk,
+                "event_type": e.event_type,
+                "timestamp": e.timestamp.isoformat(),
+                "metadata": e.metadata,
+            }
+            for e in events
+        ],
+    }
+    response = JsonResponse(data, json_dumps_params={"indent": 2})
+    response["Content-Disposition"] = 'attachment; filename="trace-%s.json"' % event.trace_id
+    return response
+
+
+@lru_cache(maxsize=None)
+def _asset_bytes(name):
+    with open(os.path.join(_ASSET_DIR, name), "rb") as f:
+        return f.read()
+
+
+def asset(request, name):
+    """
+    The dashboard's own CSS and JavaScript (including a bundled htmx), served
+    from the package so the dashboard needs no CDN and no collectstatic.
+    """
+    content_type = _ASSET_TYPES.get(name)
+    if content_type is None:
+        raise Http404("Unknown asset.")
+    response = HttpResponse(_asset_bytes(name), content_type=content_type + "; charset=utf-8")
+    response["Cache-Control"] = "private, max-age=86400"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 def queries_list(request):
@@ -130,8 +254,7 @@ def queries_list(request):
     if db_alias:
         qs = qs.filter(metadata__db_alias=db_alias)
 
-    paginator = Paginator(qs, 25)
-    page = paginator.get_page(request.GET.get("page", 1))
+    page = _paginate(request, qs)
     context = {"page": page, "filters": request.GET}
 
     if request.headers.get("HX-Request"):
@@ -152,18 +275,12 @@ def exceptions_list(request):
     qs = Event.objects.filter(event_type="exception.raised").order_by("-timestamp")
 
     exc_type = request.GET.get("exc_type", "")
-    from_date = request.GET.get("from_date", "")
-    to_date = request.GET.get("to_date", "")
 
     if exc_type:
         qs = qs.filter(metadata__exception_type=exc_type)
-    if from_date:
-        qs = qs.filter(timestamp__gte=from_date)
-    if to_date:
-        qs = qs.filter(timestamp__lte=to_date)
+    qs = _filter_dates(request, qs)
 
-    paginator = Paginator(qs, 25)
-    page = paginator.get_page(request.GET.get("page", 1))
+    page = _paginate(request, qs)
 
     # Build exception type choices from recent events
     exc_types = list(
@@ -211,8 +328,7 @@ def cache_list(request):
     if key:
         qs = qs.filter(metadata__key__icontains=key)
 
-    paginator = Paginator(qs, 25)
-    page = paginator.get_page(request.GET.get("page", 1))
+    page = _paginate(request, qs)
     context = {
         "page": page,
         "filters": request.GET,
@@ -243,8 +359,7 @@ def templates_list(request):
     if request.GET.get("top_level") == "on":
         qs = qs.filter(metadata__depth=0)
 
-    paginator = Paginator(qs, 25)
-    page = paginator.get_page(request.GET.get("page", 1))
+    page = _paginate(request, qs)
     context = {"page": page, "filters": request.GET}
 
     if request.headers.get("HX-Request"):
@@ -338,8 +453,7 @@ def logs_list(request):
     if message:
         qs = qs.filter(metadata__message__icontains=message)
 
-    paginator = Paginator(qs, 25)
-    page = paginator.get_page(request.GET.get("page", 1))
+    page = _paginate(request, qs)
     context = {"page": page, "filters": request.GET, "levels": LOG_LEVELS}
 
     if request.headers.get("HX-Request"):
@@ -364,8 +478,7 @@ def signals_list(request):
     if sender:
         qs = qs.filter(metadata__sender__icontains=sender)
 
-    paginator = Paginator(qs, 25)
-    page = paginator.get_page(request.GET.get("page", 1))
+    page = _paginate(request, qs)
     context = {
         "page": page,
         "filters": request.GET,

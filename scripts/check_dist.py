@@ -17,7 +17,11 @@ PACKAGE = ROOT / "django_inspector"
 # Every non-Python file the package needs at runtime, plus the migrations.
 REQUIRED = sorted(
     str(p.relative_to(ROOT))
-    for p in list(PACKAGE.glob("templates/**/*.html")) + list(PACKAGE.glob("migrations/*.py"))
+    for p in (
+        list(PACKAGE.glob("templates/**/*.html"))
+        + list(PACKAGE.glob("assets/*"))
+        + list(PACKAGE.glob("migrations/*.py"))
+    )
 )
 
 

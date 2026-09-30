@@ -1,7 +1,7 @@
-{% if page.has_other_pages %}
+{% load inspector_tags %}{% if page.has_other_pages %}
 <nav class="inspector-pagination">
     {% if page.has_previous %}
-    <a href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ page.previous_page_number }}">&#8592; Prev</a>
+    <a href="?{% page_query page.previous_page_number %}">&#8592; Prev</a>
     {% else %}
     <span class="disabled">&#8592; Prev</span>
     {% endif %}
@@ -10,14 +10,15 @@
         {% if num == page.number %}
         <span class="active">{{ num }}</span>
         {% elif num > page.number|add:"-3" and num < page.number|add:"3" %}
-        <a href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ num }}">{{ num }}</a>
+        <a href="?{% page_query num %}">{{ num }}</a>
         {% endif %}
     {% endfor %}
 
     {% if page.has_next %}
-    <a href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ page.next_page_number }}">Next &#8594;</a>
+    <a href="?{% page_query page.next_page_number %}">Next &#8594;</a>
     {% else %}
     <span class="disabled">Next &#8594;</span>
     {% endif %}
+    {% if page.paginator.count_capped %}<span class="disabled">(first {{ page.paginator.max_count }} results)</span>{% endif %}
 </nav>
 {% endif %}

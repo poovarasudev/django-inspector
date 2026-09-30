@@ -23,6 +23,16 @@ logger = logging.getLogger("django_inspector")
 
 _FORBIDDEN_BODY = "Inspector: access denied"
 
+# The dashboard shows captured request data (paths, headers, bodies) that an
+# attacker controls. Autoescaping is the first defence; this policy is the
+# second: only the dashboard's own scripts run, and it can't be framed.
+# Inline style attributes (waterfall bar widths) need 'unsafe-inline' styles.
+CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; object-src 'none'; base-uri 'none'; "
+    "form-action 'self'; frame-ancestors 'none'"
+)
+
 
 def _ip_allowed(request) -> bool:
     """Return True if client IP is in the allowlist, or if no allowlist is configured."""
@@ -79,6 +89,10 @@ def inspector_required(view_func):
     @wraps(view_func)
     def _wrapped(request, *args, **kwargs):
         if not can_access_dashboard(request):
-            return HttpResponseForbidden(_FORBIDDEN_BODY)
-        return view_func(request, *args, **kwargs)
+            response = HttpResponseForbidden(_FORBIDDEN_BODY)
+        else:
+            response = view_func(request, *args, **kwargs)
+        if not response.has_header("Content-Security-Policy"):
+            response["Content-Security-Policy"] = CONTENT_SECURITY_POLICY
+        return response
     return _wrapped

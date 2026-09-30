@@ -12,8 +12,12 @@
         {% endwith %}
         <span style="font-size: 14px; font-weight: 400; color: var(--ins-text-secondary); margin-left: 8px;">{{ event.metadata.latency_ms }}ms</span>
     </h1>
+    <a class="inspector-btn" href="{% url 'inspector:request-export' event.pk %}" download>Export JSON</a>
 </div>
 
+{% if trace_truncated %}
+<p class="inspector-notice">Showing the first {{ max_detail_events }} events of this trace; the counts below cover those only. Use Export JSON for the full trace.</p>
+{% endif %}
 {% if event.metadata.events_dropped %}
 <p class="inspector-notice">{{ event.metadata.events_dropped }} more event{{ event.metadata.events_dropped|pluralize }} happened in this request but {{ event.metadata.events_dropped|pluralize:"was,were" }} not stored: the trace reached <code>MAX_EVENTS_PER_TRACE</code>.</p>
 {% endif %}
@@ -134,13 +138,13 @@
 {% elif view == "tabs" %}
 <div class="inspector-card">
     <div class="inspector-tabs">
-        <button class="inspector-tab inspector-tab--active" onclick="switchTab('request-tab')">Request</button>
-        <button class="inspector-tab" onclick="switchTab('queries-tab')">Queries ({{ queries|length }})</button>
-        <button class="inspector-tab" onclick="switchTab('exceptions-tab')">Exceptions ({{ exceptions|length }})</button>
-        <button class="inspector-tab" onclick="switchTab('cache-tab')">Cache ({{ cache_events|length }})</button>
-        <button class="inspector-tab" onclick="switchTab('templates-tab')">Templates ({{ template_renders|length }})</button>
-        <button class="inspector-tab" onclick="switchTab('logs-tab')">Logs ({{ log_records|length }})</button>
-        <button class="inspector-tab" onclick="switchTab('signals-tab')">Signals ({{ signal_dispatches|length }})</button>
+        <button class="inspector-tab inspector-tab--active" type="button" data-inspector-tab="request-tab">Request</button>
+        <button class="inspector-tab" type="button" data-inspector-tab="queries-tab">Queries ({{ queries|length }})</button>
+        <button class="inspector-tab" type="button" data-inspector-tab="exceptions-tab">Exceptions ({{ exceptions|length }})</button>
+        <button class="inspector-tab" type="button" data-inspector-tab="cache-tab">Cache ({{ cache_events|length }})</button>
+        <button class="inspector-tab" type="button" data-inspector-tab="templates-tab">Templates ({{ template_renders|length }})</button>
+        <button class="inspector-tab" type="button" data-inspector-tab="logs-tab">Logs ({{ log_records|length }})</button>
+        <button class="inspector-tab" type="button" data-inspector-tab="signals-tab">Signals ({{ signal_dispatches|length }})</button>
     </div>
 
     <div id="request-tab" class="inspector-tab-panel inspector-tab-panel--active">
@@ -320,15 +324,6 @@
         </table>
     </div>
 </div>
-
-<script>
-function switchTab(tabId) {
-    document.querySelectorAll('.inspector-tab-panel').forEach(p => p.classList.remove('inspector-tab-panel--active'));
-    document.querySelectorAll('.inspector-tab').forEach(t => t.classList.remove('inspector-tab--active'));
-    document.getElementById(tabId).classList.add('inspector-tab-panel--active');
-    event.target.classList.add('inspector-tab--active');
-}
-</script>
 
 <!-- Waterfall view -->
 {% elif view == "waterfall" %}

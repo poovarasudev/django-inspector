@@ -50,7 +50,7 @@ where = ["."]
 include = ["django_inspector*"]
 
 [tool.setuptools.package-data]
-django_inspector = ["templates/**/*.html"]
+django_inspector = ["templates/**/*.html", "assets/*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "django_inspector.__version__" }
