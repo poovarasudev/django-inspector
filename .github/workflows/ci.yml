@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    name: Python ${{ matrix.python }} · Django ${{ matrix.django }}
+    runs-on: ${{ matrix.os || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Python 3.8 builds are not published for the newest Ubuntu runner.
+          - { python: "3.8", django: "4.2", os: "ubuntu-22.04" }
+          - { python: "3.9", django: "4.2" }
+          - { python: "3.10", django: "4.2" }
+          - { python: "3.11", django: "4.2" }
+          - { python: "3.12", django: "4.2" }
+          - { python: "3.10", django: "5.2" }
+          - { python: "3.11", django: "5.2" }
+          - { python: "3.12", django: "5.2" }
+          - { python: "3.13", django: "5.2" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "django~=${{ matrix.django }}.0" pytest pytest-django
+          python -m pip install --no-deps -e .
+      - name: Test
+        run: python -m pytest -q
+
+  build:
+    name: Build and check distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build
+      - run: python -m build
+      - run: python scripts/check_dist.py dist/
