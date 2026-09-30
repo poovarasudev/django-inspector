@@ -225,3 +225,49 @@ def cache_detail(request, pk):
     ).first()
     context = {"event": event, "parent_request": parent_request}
     return render(request, "inspector/cache/detail.html", context)
+
+
+def templates_list(request):
+    qs = Event.objects.filter(event_type="template.rendered").order_by("-timestamp")
+
+    name = request.GET.get("name", "")
+    if name:
+        qs = qs.filter(metadata__name__icontains=name)
+    if request.GET.get("top_level") == "on":
+        qs = qs.filter(metadata__depth=0)
+
+    paginator = Paginator(qs, 25)
+    page = paginator.get_page(request.GET.get("page", 1))
+    context = {"page": page, "filters": request.GET}
+
+    if request.headers.get("HX-Request"):
+        return render(request, "inspector/template_renders/_table.html", context)
+    return render(request, "inspector/template_renders/list.html", context)
+
+
+def template_detail(request, pk):
+    event = get_object_or_404(Event, pk=pk, event_type="template.rendered")
+    same_trace = Event.objects.filter(trace_id=event.trace_id, event_type="template.rendered")
+    render_id = event.metadata.get("render_id")
+    parent_id = event.metadata.get("parent_id")
+
+    parent_render = None
+    if parent_id is not None:
+        parent_render = same_trace.filter(metadata__render_id=parent_id).first()
+    child_renders = []
+    if render_id is not None:
+        child_renders = sorted(
+            same_trace.filter(metadata__parent_id=render_id),
+            key=lambda e: e.metadata.get("render_id") or 0,
+        )
+    parent_request = Event.objects.filter(
+        trace_id=event.trace_id, event_type="request.completed"
+    ).first()
+
+    context = {
+        "event": event,
+        "parent_render": parent_render,
+        "child_renders": child_renders,
+        "parent_request": parent_request,
+    }
+    return render(request, "inspector/template_renders/detail.html", context)

@@ -17,6 +17,10 @@
            class="inspector-sidebar-link {% if request.resolver_match.url_name == 'cache-list' or request.resolver_match.url_name == 'cache-detail' %}inspector-sidebar-link--active{% endif %}">
             Cache
         </a>
+        <a href="{% url 'inspector:templates-list' %}"
+           class="inspector-sidebar-link {% if request.resolver_match.url_name == 'templates-list' or request.resolver_match.url_name == 'template-detail' %}inspector-sidebar-link--active{% endif %}">
+            Templates
+        </a>
         <a href="{% url 'inspector:exceptions-list' %}"
            class="inspector-sidebar-link {% if request.resolver_match.url_name == 'exceptions-list' or request.resolver_match.url_name == 'exception-detail' %}inspector-sidebar-link--active{% endif %}">
             Exceptions

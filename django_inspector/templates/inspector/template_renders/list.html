@@ -1,0 +1,27 @@
+{% extends "inspector/base.html" %}
+{% block title %}Templates — Inspector{% endblock %}
+{% block content %}
+<div class="inspector-page-header">
+    <h1>Templates</h1>
+</div>
+
+<form class="inspector-filter-bar"
+      hx-get="{% url 'inspector:templates-list' %}"
+      hx-target="#results-table"
+      hx-push-url="true"
+      hx-trigger="change, keyup changed delay:300ms from:input[name=name]">
+    <label>
+        Name
+        <input type="search" name="name" value="{{ filters.name|default:'' }}" placeholder="contains…">
+    </label>
+    <label>
+        <input type="checkbox" name="top_level" {% if filters.top_level == "on" %}checked{% endif %}> Top-level only
+    </label>
+</form>
+
+<div id="results-table">
+    {% include "inspector/template_renders/_table.html" %}
+</div>
+
+{% include "inspector/_pagination.html" %}
+{% endblock %}

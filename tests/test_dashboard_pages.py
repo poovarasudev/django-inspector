@@ -109,3 +109,71 @@ class TestCachePages(DashboardTestCase):
 
     def test_sidebar_links_to_cache(self):
         assert reverse("inspector:cache-list") in self.body("live-feed")
+
+
+def template_event(render_id, name, parent_id=None, depth=0, relation=None, trace_id=TRACE, **extra):
+    data = {
+        "render_id": render_id,
+        "parent_id": parent_id,
+        "depth": depth,
+        "relation": relation,
+        "name": name,
+        "origin_path": "/app/templates/%s" % name,
+        "loader": "django.template.loaders.filesystem.Loader",
+        "duration_ms": 1.5,
+        "context_key_count": 2,
+        "context_keys": ["title", "user"],
+    }
+    data.update(extra)
+    return Event.objects.create(trace_id=trace_id, event_type="template.rendered", metadata=data)
+
+
+class TestTemplatePages(DashboardTestCase):
+    def setUp(self):
+        self.page = template_event(1, "shop/page.html")
+        self.base = template_event(2, "shop/base.html", parent_id=1, depth=1, relation="extends")
+        self.card = template_event(3, "shop/card.html", parent_id=2, depth=2, relation="include")
+        # Same render ids in another trace: must never be linked to this trace's tree.
+        self.foreign = template_event(
+            3, "elsewhere/card.html", parent_id=2, depth=2, relation="include", trace_id="b" * 32
+        )
+
+    def test_list_shows_renders(self):
+        body = self.body("templates-list")
+        assert "shop/page.html" in body
+        assert "shop/card.html" in body
+
+    def test_filter_by_name_is_case_insensitive(self):
+        body = self.body("templates-list", params={"name": "CARD"})
+        assert "shop/card.html" in body
+        assert "shop/page.html" not in body
+
+    def test_top_level_only(self):
+        body = self.body("templates-list", params={"top_level": "on"})
+        assert "shop/page.html" in body
+        assert "shop/card.html" not in body
+
+    def test_htmx_request_returns_table_partial(self):
+        body = self.body("templates-list", htmx=True)
+        assert "<table" in body
+        assert "inspector-sidebar" not in body
+
+    def test_detail_links_parent_and_children_in_same_trace_only(self):
+        body = self.body("template-detail", self.base.pk)
+        assert reverse("inspector:template-detail", args=[self.page.pk]) in body
+        assert reverse("inspector:template-detail", args=[self.card.pk]) in body
+        assert reverse("inspector:template-detail", args=[self.foreign.pk]) not in body
+        assert "/app/templates/shop/base.html" in body
+        assert "title" in body
+
+    def test_detail_of_top_level_render(self):
+        body = self.body("template-detail", self.page.pk)
+        assert "Top-level render" in body
+        assert reverse("inspector:template-detail", args=[self.base.pk]) in body
+
+    def test_detail_shows_error(self):
+        failed = template_event(9, "shop/broken.html", error="ValueError: boom")
+        assert "ValueError: boom" in self.body("template-detail", failed.pk)
+
+    def test_sidebar_links_to_templates(self):
+        assert reverse("inspector:templates-list") in self.body("live-feed")

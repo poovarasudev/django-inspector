@@ -15,4 +15,6 @@ urlpatterns = [
     path("exceptions/<int:pk>/", inspector_required(views.exception_detail), name="exception-detail"),
     path("cache/", inspector_required(views.cache_list), name="cache-list"),
     path("cache/<int:pk>/", inspector_required(views.cache_detail), name="cache-detail"),
+    path("templates/", inspector_required(views.templates_list), name="templates-list"),
+    path("templates/<int:pk>/", inspector_required(views.template_detail), name="template-detail"),
 ]

@@ -1,0 +1,66 @@
+{% extends "inspector/base.html" %}
+{% block title %}Template Render — Inspector{% endblock %}
+{% block content %}
+<a href="{% url 'inspector:templates-list' %}" class="inspector-back-link">&#8592; Back to Templates</a>
+
+<div class="inspector-page-header">
+    <h1>{{ event.metadata.name|default:"(from string)" }}</h1>
+</div>
+
+{% if event.metadata.error %}
+<div class="inspector-card">
+    <h3 style="margin-bottom: 12px; font-size: 14px; color: var(--ins-text-secondary); text-transform: uppercase;">Error</h3>
+    <pre class="inspector-code">{{ event.metadata.error }}</pre>
+</div>
+{% endif %}
+
+<div class="inspector-card">
+    <table class="inspector-detail-table">
+        <tr><th>Source</th><td class="inspector-code-inline">{{ event.metadata.origin_path|default:"-" }}</td></tr>
+        <tr><th>Loader</th><td class="inspector-code-inline">{{ event.metadata.loader|default:"-" }}</td></tr>
+        <tr><th>Duration</th><td>{{ event.metadata.duration_ms }}ms (includes nested renders)</td></tr>
+        <tr><th>Relation</th><td>{{ event.metadata.relation|default:"top-level" }}</td></tr>
+        <tr><th>Depth</th><td>{{ event.metadata.depth }}</td></tr>
+        <tr>
+            <th>Context keys ({{ event.metadata.context_key_count }})</th>
+            <td>
+                {{ event.metadata.context_keys|join:", "|default:"-" }}
+                {% if event.metadata.context_key_count > event.metadata.context_keys|length %}
+                <div style="font-size: 12px; color: var(--ins-text-secondary);">Showing the first {{ event.metadata.context_keys|length }}.</div>
+                {% endif %}
+            </td>
+        </tr>
+    </table>
+</div>
+
+<div class="inspector-card">
+    <h3 style="margin-bottom: 12px; font-size: 14px; color: var(--ins-text-secondary); text-transform: uppercase;">Render tree</h3>
+    <table class="inspector-detail-table">
+        <tr>
+            <th>Rendered inside</th>
+            <td>
+                {% if parent_render %}
+                <a href="{% url 'inspector:template-detail' parent_render.pk %}" class="inspector-code-inline">{{ parent_render.metadata.name|default:"(from string)" }}</a>
+                {% else %}Top-level render{% endif %}
+            </td>
+        </tr>
+        <tr>
+            <th>Renders inside it</th>
+            <td>
+                {% for child in child_renders %}
+                <div><a href="{% url 'inspector:template-detail' child.pk %}" class="inspector-code-inline">{{ child.metadata.name|default:"(from string)" }}</a> — {{ child.metadata.relation }}, {{ child.metadata.duration_ms }}ms</div>
+                {% empty %}-{% endfor %}
+            </td>
+        </tr>
+    </table>
+</div>
+
+{% if parent_request %}
+<div class="inspector-card">
+    <a href="{% url 'inspector:request-detail' parent_request.pk %}" style="color: var(--ins-accent); text-decoration: none; font-weight: 500;">
+        View Request &#8594; {{ parent_request.metadata.method }} {{ parent_request.metadata.path }}
+    </a>
+</div>
+{% endif %}
+
+{% endblock %}
