@@ -80,6 +80,7 @@ class TestExceptionGroups(TestCase):
         assert boom["example_id"] == example.pk
         assert boom["exception_message"] == "boom"
         assert boom["frame"] == "/app/views.py:view"
+        assert boom["example_trace_id"] == _tid(2)
 
     def test_orders_by_count_then_last_seen(self):
         exception_event(exc_type="app.errors.Rare", trace_id=_tid(1))
@@ -140,6 +141,7 @@ class TestQueryShapeGroups(TestCase):
         assert row["affected_traces"] == 4
         assert row["p50"] == 20
         assert row["p95"] == 40
+        assert row["example_trace_id"] == _tid(3)
 
     def test_percentiles_with_a_single_value(self):
         sql_event(duration_ms=15)

@@ -6,6 +6,7 @@ from django_inspector.dashboard.auth import inspector_required
 app_name = "inspector"
 
 urlpatterns = [
+    path("issues/", inspector_required(views.issues), name="issues"),
     path("", inspector_required(views.live_feed), name="live-feed"),
     path("requests/", inspector_required(views.requests_list), name="requests-list"),
     path("requests/<int:pk>/", inspector_required(views.request_detail), name="request-detail"),

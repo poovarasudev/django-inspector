@@ -296,6 +296,21 @@ class TestTracesListTypeFilter(DashboardClient):
         assert "nightly-report" not in body
 
 
+class TestIssuesPageAccessAndCost(DashboardClient):
+    def test_requires_access(self):
+        assert self.get("issues", user=AnonymousUser()).status_code == 403
+
+    def test_query_count_is_bounded(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        request_event()
+        Event.objects.create(trace_id=TRACE, event_type="sql.query", metadata={"sql": "SELECT 1"})
+        with CaptureQueriesContext(connection):
+            self.get("issues")
+        assert len(connection.queries) <= 12
+
+
 class TestDetailCap(DashboardClient):
     def test_huge_traces_are_truncated_with_a_notice(self):
         from django_inspector.dashboard import views

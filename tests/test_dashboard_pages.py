@@ -5,9 +5,10 @@ import logging
 import pytest
 from django.contrib.auth.models import User
 from django.http import Http404
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import resolve, reverse
 
+from django_inspector.storage.columns import exception_fingerprint, sql_fingerprint
 from django_inspector.storage.models import Event
 
 TRACE = "a" * 32
@@ -435,3 +436,112 @@ class TestDroppedEventsNotice(DashboardTestCase):
         )
         body = self.body("request-detail", event.pk)
         assert "7 more events happened in this request" in body
+
+
+def issue_exception_event(trace_id=TRACE, **extra):
+    frames = [{"file": "/app/orders/views.py", "line": 12, "function": "checkout"}]
+    metadata = {
+        "exception_type": "app.errors.PaymentFailed",
+        "exception_message": "card declined",
+        "frames": frames,
+    }
+    metadata.update(extra)
+    return Event.objects.create(
+        trace_id=trace_id, event_type="exception.raised", metadata=metadata,
+        fingerprint=exception_fingerprint(metadata["exception_type"], frames),
+    )
+
+
+def issue_sql_event(trace_id=TRACE, **extra):
+    metadata = {
+        "sql": "SELECT * FROM orders WHERE id = 1", "db_alias": "default",
+        "duration_ms": 12.0, "origin_file": "/app/orders/views.py", "origin_line": 20,
+    }
+    metadata.update(extra)
+    return Event.objects.create(
+        trace_id=trace_id, event_type="sql.query", metadata=metadata,
+        fingerprint=sql_fingerprint(metadata["sql"], metadata["db_alias"]),
+        duration_ms=metadata["duration_ms"],
+    )
+
+
+def issue_request_event(trace_id=TRACE, **extra):
+    metadata = {
+        "method": "GET", "path": "/orders/1/", "route": "orders/<int:pk>/",
+        "status_code": 200, "latency_ms": 25.0,
+    }
+    metadata.update(extra)
+    return Event.objects.create(
+        trace_id=trace_id, event_type="request.completed", metadata=metadata,
+        method=metadata["method"], path=metadata["path"], status_code=metadata["status_code"],
+        duration_ms=metadata["latency_ms"],
+    )
+
+
+class TestIssuesPage(DashboardTestCase):
+    def setUp(self):
+        self.exc = issue_exception_event()
+        self.sql = issue_sql_event()
+        self.req = issue_request_event()
+
+    def test_renders_exceptions_queries_and_endpoints(self):
+        body = self.body("issues")
+        assert "app.errors.PaymentFailed" in body
+        assert "card declined" in body
+        assert "orders" in body
+        assert "orders/&lt;int:pk&gt;/" in body
+        assert reverse("inspector:trace-detail", args=[TRACE]) in body
+
+    def test_empty_states(self):
+        Event.objects.all().delete()
+        body = self.body("issues")
+        assert "No exceptions in this window" in body
+        assert "No query shapes in this window" in body
+        assert "No endpoints in this window" in body
+
+    def test_window_selector_links(self):
+        body = self.body("issues")
+        assert 'href="?window=1h"' in body
+        assert 'href="?window=7d"' in body
+
+    def test_bad_window_falls_back_to_24h(self):
+        body = self.body("issues", params={"window": "bogus"})
+        assert (
+            'href="?window=24h" class="inspector-view-switcher__link '
+            'inspector-view-switcher__link--active"' in body
+        )
+
+    def test_window_param_selects_the_active_window(self):
+        body = self.body("issues", params={"window": "1h"})
+        assert (
+            'href="?window=1h" class="inspector-view-switcher__link '
+            'inspector-view-switcher__link--active"' in body
+        )
+
+    def test_scan_cap_notice_shown_when_hit(self):
+        from django_inspector.dashboard import issues
+
+        for i in range(5):
+            issue_exception_event(trace_id=str(i) * 32)
+        original = issues.ISSUES_SCAN_LIMIT
+        issues.ISSUES_SCAN_LIMIT = 2
+        try:
+            body = self.body("issues")
+        finally:
+            issues.ISSUES_SCAN_LIMIT = original
+        assert "Based on the latest 2" in body
+
+    @override_settings(DJANGO_INSPECTOR={"SAMPLING_RATE": 0.5})
+    def test_sampling_notice_shown_when_rate_below_one(self):
+        body = self.body("issues")
+        assert "sampl" in body.lower()
+
+    def test_sampling_notice_hidden_at_full_rate(self):
+        body = self.body("issues")
+        assert "relative, not totals" not in body
+
+    def test_sidebar_lists_issues_first(self):
+        body = self.body("live-feed")
+        issues_href = 'href="%s"' % reverse("inspector:issues")
+        live_href = 'href="%s"' % reverse("inspector:live-feed")
+        assert body.index(issues_href) < body.index(live_href)

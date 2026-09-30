@@ -2,6 +2,10 @@
 <aside class="inspector-sidebar">
     <div class="inspector-sidebar-title">&#128269; Inspector</div>
     <nav class="inspector-sidebar-nav">
+        <a href="{% url 'inspector:issues' %}"
+           class="inspector-sidebar-link {% if request.resolver_match.url_name == 'issues' %}inspector-sidebar-link--active{% endif %}">
+            Issues
+        </a>
         <a href="{% url 'inspector:live-feed' %}"
            class="inspector-sidebar-link {% if request.resolver_match.url_name == 'live-feed' %}inspector-sidebar-link--active{% endif %}">
             Live Feed

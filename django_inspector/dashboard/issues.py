@@ -87,6 +87,7 @@ def exception_groups(since, limit=50) -> Tuple[List[dict], bool]:
             "exception_type": metadata.get("exception_type"),
             "exception_message": _truncate(metadata.get("exception_message")),
             "frame": "%s:%s" % (frame.get("file") or "", frame.get("function") or "") if frame else None,
+            "example_trace_id": example.trace_id if example else None,
         })
     return results, capped
 
@@ -142,6 +143,7 @@ def query_shape_groups(since, limit=50) -> Tuple[List[dict], bool]:
             "origin": "%s:%s" % top_origin if top_origin else None,
             "p50": _percentile(shape_durations, 50),
             "p95": _percentile(shape_durations, 95),
+            "example_trace_id": example.trace_id if example else None,
         })
     return results, capped
 

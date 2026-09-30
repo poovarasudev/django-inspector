@@ -13,6 +13,7 @@ from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
 from django_inspector.conf import inspector_settings
+from django_inspector.dashboard import issues as issues_data
 from django_inspector.storage.models import Event
 from django_inspector.watchers.cache import CACHE_EVENT_TYPES
 
@@ -20,6 +21,14 @@ CACHE_OPERATIONS = [event_type.split(".", 1)[1] for event_type in CACHE_EVENT_TY
 LOG_LEVELS = [(10, "DEBUG"), (20, "INFO"), (30, "WARNING"), (40, "ERROR"), (50, "CRITICAL")]
 PAGE_SIZE = 25
 MAX_DETAIL_EVENTS = 2000  # events shown on one request's page
+
+# Issues page window choices (DASH-04); an unrecognised ?window= falls back to 24h.
+ISSUES_WINDOWS = {
+    "1h": datetime.timedelta(hours=1),
+    "24h": datetime.timedelta(hours=24),
+    "7d": datetime.timedelta(days=7),
+}
+ISSUES_DEFAULT_WINDOW = "24h"
 
 # Event types that anchor a non-request trace on /trace/<id>/ and the Traces
 # list. Phase 15 adds task.completed.
@@ -82,6 +91,35 @@ def _filter_dates(request, qs):
 
 def _normalize_trace_id(value):
     return (value or "").strip().lower().replace("-", "")
+
+
+def issues(request):
+    """
+    /issues/: "what should I fix first?" — exceptions by fingerprint, SQL by
+    query shape and endpoints by route, over a bounded window. A snapshot:
+    no HTMX polling, no pagination.
+    """
+    window = request.GET.get("window")
+    if window not in ISSUES_WINDOWS:
+        window = ISSUES_DEFAULT_WINDOW
+    since = timezone.now() - ISSUES_WINDOWS[window]
+
+    exceptions, exceptions_capped = issues_data.exception_groups(since)
+    queries, queries_capped = issues_data.query_shape_groups(since)
+    endpoints, endpoints_capped = issues_data.endpoint_stats(since)
+
+    context = {
+        "window": window,
+        "exceptions": exceptions,
+        "exceptions_capped": exceptions_capped,
+        "queries": queries,
+        "queries_capped": queries_capped,
+        "endpoints": endpoints,
+        "endpoints_capped": endpoints_capped,
+        "scan_limit": issues_data.ISSUES_SCAN_LIMIT,
+        "sampled": inspector_settings.SAMPLING_RATE < 1,
+    }
+    return render(request, "inspector/issues.html", context)
 
 
 def live_feed(request):

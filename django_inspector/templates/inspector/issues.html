@@ -1,0 +1,131 @@
+{% extends "inspector/base.html" %}
+{% block title %}Issues — Inspector{% endblock %}
+{% block content %}
+<div class="inspector-page-header">
+    <h1>Issues</h1>
+</div>
+
+<nav class="inspector-view-switcher">
+    <a href="?window=1h" class="inspector-view-switcher__link{% if window == "1h" %} inspector-view-switcher__link--active{% endif %}">Last hour</a>
+    <a href="?window=24h" class="inspector-view-switcher__link{% if window == "24h" %} inspector-view-switcher__link--active{% endif %}">Last 24 hours</a>
+    <a href="?window=7d" class="inspector-view-switcher__link{% if window == "7d" %} inspector-view-switcher__link--active{% endif %}">Last 7 days</a>
+</nav>
+
+{% if sampled %}
+<p class="inspector-issues-notice">Sampling is on: counts below are from sampled data and are relative, not totals.</p>
+{% endif %}
+
+<section class="inspector-issues-section">
+    <h2>Exceptions</h2>
+    {% if exceptions_capped %}<p class="inspector-issues-notice">Based on the latest {{ scan_limit }} exceptions in this window.</p>{% endif %}
+    <table class="inspector-table">
+        <thead>
+            <tr>
+                <th>Exception</th>
+                <th>Message</th>
+                <th>Where</th>
+                <th>Count</th>
+                <th>Affected traces</th>
+                <th>First seen</th>
+                <th>Last seen</th>
+                <th>Example</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in exceptions %}
+            <tr>
+                <td><span class="inspector-exc-badge">{{ row.exception_type }}</span></td>
+                <td>{{ row.exception_message|truncatechars:80 }}</td>
+                <td class="inspector-code-inline">{{ row.frame|default:"-" }}</td>
+                <td>{{ row.count }}</td>
+                <td>{{ row.affected_traces }}</td>
+                <td>{{ row.first_seen|timesince }} ago</td>
+                <td>{{ row.last_seen|timesince }} ago</td>
+                <td><a href="{% url 'inspector:trace-detail' row.example_trace_id %}">View trace</a></td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="8" style="text-align: center; padding: 40px; color: var(--ins-text-secondary);">No exceptions in this window.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section class="inspector-issues-section">
+    <h2>Query shapes</h2>
+    {% if queries_capped %}<p class="inspector-issues-notice">Based on the latest {{ scan_limit }} queries in this window.</p>{% endif %}
+    <table class="inspector-table">
+        <thead>
+            <tr>
+                <th>SQL</th>
+                <th>Origin</th>
+                <th>Count</th>
+                <th>Affected traces</th>
+                <th>N+1 traces</th>
+                <th>p50</th>
+                <th>p95</th>
+                <th>Example</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in queries %}
+            <tr>
+                <td class="inspector-code-inline">{{ row.sql|truncatechars:80 }}</td>
+                <td class="inspector-code-inline">{{ row.origin|default:"-" }}</td>
+                <td>{{ row.count }}</td>
+                <td>{{ row.affected_traces }}</td>
+                <td>
+                    {{ row.n_plus_one_traces }}
+                    {% if row.n_plus_one_traces %}<span class="inspector-indicator inspector-indicator--n-plus-one">N+1</span>{% endif %}
+                </td>
+                <td>{{ row.p50|default_if_none:"-" }}ms</td>
+                <td>{{ row.p95|default_if_none:"-" }}ms</td>
+                <td><a href="{% url 'inspector:trace-detail' row.example_trace_id %}">View trace</a></td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="8" style="text-align: center; padding: 40px; color: var(--ins-text-secondary);">No query shapes in this window.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section class="inspector-issues-section">
+    <h2>Endpoints</h2>
+    {% if endpoints_capped %}<p class="inspector-issues-notice">Based on the latest {{ scan_limit }} requests in this window.</p>{% endif %}
+    <table class="inspector-table">
+        <thead>
+            <tr>
+                <th>Method</th>
+                <th>Endpoint</th>
+                <th>Count</th>
+                <th>p50</th>
+                <th>p95</th>
+                <th>Error rate</th>
+                <th>Client error rate</th>
+                <th>Slowest example</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in endpoints %}
+            <tr>
+                <td><span class="inspector-method-badge inspector-method-badge--{{ row.method|lower }}">{{ row.method }}</span></td>
+                <td class="inspector-code-inline">{{ row.endpoint }}</td>
+                <td>{{ row.count }}</td>
+                <td>{{ row.p50|default_if_none:"-" }}ms</td>
+                <td>{{ row.p95|default_if_none:"-" }}ms</td>
+                <td>{{ row.error_rate|floatformat:2 }}</td>
+                <td>{{ row.client_error_rate|floatformat:2 }}</td>
+                <td><a href="{% url 'inspector:trace-detail' row.example_trace_id %}">View trace</a></td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="8" style="text-align: center; padding: 40px; color: var(--ins-text-secondary);">No endpoints in this window.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}
