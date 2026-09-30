@@ -108,6 +108,8 @@ def _check_values(user):
         value = user["TRACE_HEADER"]
         if not (isinstance(value, bool) or value == "debug"):
             errors.append(_invalid("TRACE_HEADER", 'True, False or "debug"', value))
+    if "N_PLUS_ONE" in user and user["N_PLUS_ONE"] not in ("off", "warn", "raise"):
+        errors.append(_invalid("N_PLUS_ONE", '"off", "warn" or "raise"', user["N_PLUS_ONE"]))
     if "LOG_LEVEL_THRESHOLD" in user:
         level = user["LOG_LEVEL_THRESHOLD"]
         valid = _is_int(level) or (

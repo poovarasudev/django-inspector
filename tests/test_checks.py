@@ -42,6 +42,8 @@ class TestSettingsCheck:
         ("WATCHERS", ["sql"]),
         ("TRACE_HEADER", "always"),
         ("TRACE_HEADER", 1),
+        ("N_PLUS_ONE", "verbose"),
+        ("N_PLUS_ONE", True),
     ])
     def test_invalid_values_are_errors(self, key, value):
         with override_settings(DJANGO_INSPECTOR={key: value}):
@@ -58,6 +60,9 @@ class TestSettingsCheck:
         ("TRACE_HEADER", "debug"),
         ("TRACE_HEADER", True),
         ("TRACE_HEADER", False),
+        ("N_PLUS_ONE", "off"),
+        ("N_PLUS_ONE", "warn"),
+        ("N_PLUS_ONE", "raise"),
     ])
     def test_valid_values_pass(self, key, value):
         with override_settings(DJANGO_INSPECTOR={key: value}):
