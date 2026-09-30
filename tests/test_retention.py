@@ -14,9 +14,9 @@ from django_inspector.storage.models import Event
 pytestmark = pytest.mark.django_db
 
 
-def _event(hours_ago, trace="t" * 32):
+def _event(hours_ago, trace="t" * 32, pinned=False):
     return Event.objects.create(
-        trace_id=trace, event_type="sql.query", metadata={},
+        trace_id=trace, event_type="sql.query", metadata={}, pinned=pinned,
         timestamp=timezone.now() - datetime.timedelta(hours=hours_ago),
     )
 
@@ -44,6 +44,12 @@ class TestDeleteOlderThan:
         assert retention.delete_older_than(cutoff, batch_size=2) == 3
         assert Event.objects.count() == 0
 
+    def test_pinned_events_survive(self):
+        pinned = _event(48, pinned=True)
+        cutoff = timezone.now() - datetime.timedelta(hours=24)
+        assert retention.delete_older_than(cutoff) == 0
+        assert Event.objects.filter(pk=pinned.pk).exists()
+
 
 class TestMaybePrune:
     def test_no_retention_setting_keeps_everything(self):
@@ -65,6 +71,12 @@ class TestMaybePrune:
         _event(48)
         assert retention.maybe_prune() == 0
         assert Event.objects.count() == 1
+
+    @override_settings(DJANGO_INSPECTOR={"RETENTION_HOURS": 24})
+    def test_pinned_events_survive_pruning(self):
+        pinned = _event(48, pinned=True)
+        assert retention.maybe_prune() == 0
+        assert Event.objects.filter(pk=pinned.pk).exists()
 
     @override_settings(DJANGO_INSPECTOR={"RETENTION_HOURS": 24})
     def test_the_middleware_prunes_after_flushing(self):
@@ -116,3 +128,15 @@ class TestCleanupCommand:
             _event(48)
         call_command("inspector_cleanup", "--batch-size", "1", stdout=StringIO())
         assert Event.objects.count() == 0
+
+    def test_pinned_events_survive_cleanup(self):
+        pinned = _event(48, pinned=True)
+        call_command("inspector_cleanup", "--hours", "5", stdout=StringIO())
+        assert Event.objects.filter(pk=pinned.pk).exists()
+
+    def test_dry_run_count_excludes_pinned_events(self):
+        _event(48, pinned=True)
+        _event(48, pinned=False)
+        out = StringIO()
+        call_command("inspector_cleanup", "--dry-run", stdout=out)
+        assert "Would delete 1 event(s)" in out.getvalue()
