@@ -48,6 +48,7 @@ WATCHER_MODULES = (
     "django_inspector.watchers.template",
     "django_inspector.watchers.signal",
     "django_inspector.watchers.log",
+    "django_inspector.watchers.command",
 )
 
 

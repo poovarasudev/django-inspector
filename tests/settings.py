@@ -8,6 +8,7 @@ INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.admin",
     "django_inspector",
+    "tests.testapp",
 ]
 MIDDLEWARE = [
     "django_inspector.middleware.InspectorMiddleware",

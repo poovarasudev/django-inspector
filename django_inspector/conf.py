@@ -13,6 +13,7 @@ DEFAULTS: Dict[str, Any] = {
         "template": False,  # opt in with {"WATCHERS": {"template": True}}
         "signal": False,    # SIGL-06: opt in with {"WATCHERS": {"signal": True}}
         "log": True,        # records at LOG_LEVEL_THRESHOLD or above
+        "command": True,    # CMD-02: inert until COMMAND_WATCH_LIST names a command
     },
     # Must match where the host mounts django_inspector.dashboard.urls; requests under it are never traced.
     "DASHBOARD_URL_PREFIX": "inspector/",
@@ -40,6 +41,7 @@ DEFAULTS: Dict[str, Any] = {
     "LOG_LEVEL_THRESHOLD": "WARNING",   # level name or number; the log watcher ignores records below it
     "INSPECTOR_RAISE_ERRORS": False,    # if True, inspector-internal errors propagate (useful in dev/tests)
     "TRACE_HEADER": "debug",            # X-Inspector-Trace on kept traces: True, False, or "debug" (only when DEBUG)
+    "COMMAND_WATCH_LIST": [],           # CMD-02: management command names to trace; empty = trace nothing
 }
 
 

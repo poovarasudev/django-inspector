@@ -29,6 +29,7 @@ _STRING_LIST_KEYS = (
     "IGNORE_EXCEPTIONS",
     "SIGNAL_WATCH_LIST",
     "INSPECTOR_DASHBOARD_IP_ALLOWLIST",
+    "COMMAND_WATCH_LIST",
 )
 
 
@@ -150,11 +151,20 @@ def _check_values(user):
 
 
 def _check_references(user):
-    """Dotted paths that must import."""
+    """Dotted paths that must import, plus other settings needing a live lookup."""
     from django.dispatch import Signal
     from django.utils.module_loading import import_string
 
+    from django_inspector.watchers.command import NEVER_TRACED
+
     errors = []
+    for name in _strings(user.get("COMMAND_WATCH_LIST")):
+        if name in NEVER_TRACED:
+            errors.append(Warning(
+                "COMMAND_WATCH_LIST includes %r, which is never traced." % (name,),
+                hint="Remove it from COMMAND_WATCH_LIST.",
+                id="django_inspector.W009",
+            ))
     for name in _strings(user.get("IGNORE_EXCEPTIONS")):
         try:
             import_string(name)
