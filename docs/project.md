@@ -12,7 +12,7 @@
 
 ### Validated
 
-<!-- Shipped at tag v1.0 — confirmed by passing tests and committed dashboard. -->
+<!-- Shipped — confirmed by passing tests. -->
 
 - ✓ Trace propagation via async-safe `ContextVar` — v1.0 (Phase 1)
 - ✓ `InspectorMiddleware` lifecycle (trace id → notify watchers → flush buffer) — v1.0 (Phase 1)
@@ -23,21 +23,21 @@
 - ✓ **Exception watcher** — type, message, stack, locals, chained `__cause__`/`__context__` via `got_request_exception` — v1.0 (Phase 2)
 - ✓ Dashboard: live feed, requests/queries/exceptions list+detail, filters, HTMX partials, per-trace timeline + waterfall — v1.0 (Phase 3)
 - ✓ `inspector_cleanup --hours N --dry-run` management command — v1.0 (Phase 3)
+- ✓ **Sensitive-data masking** — redact passwords, tokens, cookies, Authorization, CSRF, credit-card-shaped strings; configurable `SENSITIVE_KEYS` (PRD §14) — v1.1 (Phase 4)
+- ✓ **Sampling** — `SAMPLING_RATE` + always-on for errors / slow requests (PRD §15) — v1.1 (Phase 4)
+- ✓ **Dashboard access control** — staff-only by default, optional IP allowlist (PRD §14) — v1.1 (Phase 4)
+- ✓ **Async-safe buffers** — replace `threading.local` with `ContextVar` in SQL log + event buffer — v1.1 (Phase 4)
+- ✓ **`IGNORE_PATHS` / `IGNORE_EXCEPTIONS`** — config-driven filtering at watcher entry — v1.1 (Phase 4)
+- ✓ **Quiet-by-default logging** — replace silent `except Exception: pass` with `logger.warning(..., exc_info=True)` everywhere — v1.1 (Phase 4)
 
 ### Active
 
-<!-- v1.1 — Finish Phase 1 of the PRD + production safety. -->
+<!-- v1.1 — Finish the remaining PRD Phase-1 watchers (roadmap Phases 5–7). -->
 
 - [ ] **Cache watcher** — get/set/delete/clear, key, TTL, backend, hit/miss tracking (PRD §11.5)
 - [ ] **Template watcher** — template hierarchy, render time, context size, source path (PRD §11.6)
 - [ ] **Signal watcher** — signal, sender, receiver, execution time, ordering (PRD §11.7)
 - [ ] **Logging watcher** — logger, level, message, traceback, file, line, with trace correlation (PRD §11.4)
-- [ ] **Sensitive-data masking** — redact passwords, tokens, cookies, Authorization, CSRF, credit-card-shaped strings; configurable `SENSITIVE_KEYS` (PRD §14)
-- [ ] **Sampling** — `SAMPLING_RATE` + always-on for errors / slow requests (PRD §15)
-- [ ] **Dashboard access control** — staff-only by default, optional IP allowlist (PRD §14)
-- [ ] **Async-safe buffers** — replace `threading.local` with `ContextVar` in SQL log + event buffer
-- [ ] **`IGNORE_PATHS` / `IGNORE_EXCEPTIONS`** — config-driven filtering at watcher entry
-- [ ] **Quiet-by-default logging** — replace silent `except Exception: pass` with `logger.warning(..., exc_info=True)` everywhere
 
 ### Out of Scope
 
@@ -57,15 +57,14 @@
 
 ### Current state (brownfield)
 
-This is **not** a greenfield project. v1.0 MVP was completed and tagged on 2026-05-03 across three phases:
+This is **not** a greenfield project. v1.0 MVP was completed and tagged on 2026-05-03 across three phases; v1.1 Phase 4 landed on 2026-05-23:
 
 - **Phase 1 — Foundation** (3 plans, commits `64c19ca`, `cbd5cf9`, `176ad8f`): pyproject, AppConfig, settings, registry, tracing ContextVar, middleware, BaseWatcher, Event model, storage flush, migrations. 20 tests passing.
 - **Phase 2 — Watchers** (commit `22aaf7a`): Request, SQL, Exception watchers landed together. Net +1,918 lines.
 - **Phase 3 — Dashboard + ops** (3 plans, commits `75af996`, `2b58322`, `8b90e3c`): dashboard foundation, `inspector_cleanup`, dashboard pages with HTMX.
+- **Phase 4 — Safety & Hardening** (3 plans, commits `d4dc5db`, `ed5daa5`, `8b483ac`): masking, sampling, dashboard auth, ignore lists, ContextVar buffers, loud-by-default logging. 128 tests passing.
 
-A previous GSD setup was archived (`0675c3a` + `72eaeee`). This is a fresh initialization for the next milestone.
-
-Full brownfield map lives under `.planning/codebase/` (STACK, ARCHITECTURE, STRUCTURE, INTEGRATIONS, CONVENTIONS, TESTING, CONCERNS).
+Full brownfield map lives under `docs/architecture/` (STACK, ARCHITECTURE, STRUCTURE, INTEGRATIONS, CONVENTIONS, TESTING, CONCERNS).
 
 ### Technical environment
 
@@ -91,30 +90,22 @@ PRD §11 Phase 1 lists 7 watchers; v1.0 shipped 3 of them. Closing the Phase-1 s
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Bundle production-safety into v1.1 alongside new watchers | Existing watchers already capture sensitive data; shipping more watchers before masking/auth would increase blast radius | — Pending |
+| Bundle production-safety into v1.1 alongside new watchers | Existing watchers already capture sensitive data; shipping more watchers before masking/auth would increase blast radius | ✓ Done (Phase 4) |
 | Stay on ORM-only storage; do not introduce `AbstractStorageBackend` yet | YAGNI — no second backend in scope. Premature abstraction costs more than it saves | — Pending |
 | Keep synchronous bulk_create flush; defer async offload | Sampling will cap volume well below where flush latency matters; async offload is non-trivial to do safely | — Pending |
-| Use `ContextVar` everywhere for per-trace state (not just trace id) | Sync-only today, ASGI tomorrow. Cheaper to do it once now than migrate twice | — Pending |
-| Log instead of swallow inspector errors | Operators need to know when the inspector is misbehaving; "never break the host request" stays but becomes loud-by-default | — Pending |
+| Use `ContextVar` everywhere for per-trace state (not just trace id) | Sync-only today, ASGI tomorrow. Cheaper to do it once now than migrate twice | ✓ Done (Phase 4) |
+| Log instead of swallow inspector errors | Operators need to know when the inspector is misbehaving; "never break the host request" stays but becomes loud-by-default | ✓ Done (Phase 4) |
 | Choose MIT or Apache-2.0 (currently inconsistent) | `pyproject.toml` says MIT, `LICENSE` file is Apache-2.0. Must reconcile before any PyPI release | — Pending |
-| Coarse granularity, YOLO mode, parallel execution, balanced models, all workflow agents on (research / plan-check / verifier) | Matches the discipline used in v1.0 and the small-team / single-maintainer reality | — Pending |
+| Plan and execute with the Superpowers workflow (brainstorm → spec → plan → subagent-driven execution) | Replaced the earlier GSD `.planning/` flow on 2026-09-30; specs and plans live in `docs/superpowers/` | ✓ Adopted |
 
 ## Evolution
 
-This document evolves at phase transitions and milestone boundaries.
+Update this document when a spec ships or scope changes:
 
-**After each phase transition** (via `/gsd-progress` or `/gsd-transition`):
-1. Requirements invalidated? → Move to Out of Scope with reason.
-2. Requirements validated? → Move to Validated with phase reference.
-3. New requirements emerged? → Add to Active.
+1. Requirements validated? → Move to Validated with the phase reference.
+2. Requirements invalidated? → Move to Out of Scope with the reason.
+3. New requirements emerged? → Add to Active and to `docs/requirements.md`.
 4. Decisions to log? → Add to Key Decisions.
-5. "What This Is" still accurate? → Update if drifted.
-
-**After each milestone** (via `/gsd-complete-milestone`):
-1. Full review of all sections.
-2. Core Value check — still the right priority?
-3. Audit Out of Scope — reasons still valid?
-4. Update Context with current state.
 
 ---
-*Last updated: 2026-05-23 after initialization (brownfield, v1.1 milestone)*
+*Last updated: 2026-09-30 — migrated from GSD `.planning/` to Superpowers `docs/`*

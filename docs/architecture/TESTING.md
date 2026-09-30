@@ -1,5 +1,7 @@
 # Testing
 
+> **Snapshot:** written at v1.0 (2026-05-23), before Phase 4 added `masking.py`, `sampling.py`, `ignores.py`, `dashboard/auth.py` and the ContextVar buffers. Check the code before relying on details here, and refresh this file when you touch the area it describes.
+
 ## Tooling
 
 - **Runner**: `pytest` (`>=7.0`).
@@ -12,19 +14,19 @@
 
 ```bash
 # all tests
-uv run pytest
+uv run --extra dev python -m pytest
 
 # verbose
-uv run pytest -v
+uv run --extra dev python -m pytest -v
 
 # single file
-uv run pytest tests/test_sql_watcher.py
+uv run --extra dev python -m pytest tests/test_sql_watcher.py
 
 # single test by node id
-uv run pytest tests/test_sql_watcher.py::test_records_duration
+uv run --extra dev python -m pytest tests/test_sql_watcher.py::test_records_duration
 
 # with coverage
-uv run coverage run -m pytest && uv run coverage report
+uv run --extra dev coverage run -m pytest && uv run --extra dev coverage report
 ```
 
 ## Layout

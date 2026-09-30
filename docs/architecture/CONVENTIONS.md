@@ -1,5 +1,7 @@
 # Conventions
 
+> **Snapshot:** written at v1.0 (2026-05-23), before Phase 4 added `masking.py`, `sampling.py`, `ignores.py`, `dashboard/auth.py` and the ContextVar buffers. Check the code before relying on details here, and refresh this file when you touch the area it describes.
+
 Patterns and conventions established by the existing codebase. New code in v1.1+ should follow these unless there's a documented reason to break.
 
 ## Naming

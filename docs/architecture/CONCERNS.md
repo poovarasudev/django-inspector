@@ -1,5 +1,7 @@
 # Concerns
 
+> **Snapshot:** written at v1.0 (2026-05-23), before Phase 4 added `masking.py`, `sampling.py`, `ignores.py`, `dashboard/auth.py` and the ContextVar buffers. Check the code before relying on details here, and refresh this file when you touch the area it describes.
+
 Risks, smells, and gaps surfaced by reading the current code. Ordered by approximate severity.
 
 ---

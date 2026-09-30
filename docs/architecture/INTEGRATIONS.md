@@ -1,5 +1,7 @@
 # Integrations
 
+> **Snapshot:** written at v1.0 (2026-05-23), before Phase 4 added `masking.py`, `sampling.py`, `ignores.py`, `dashboard/auth.py` and the ContextVar buffers. Check the code before relying on details here, and refresh this file when you touch the area it describes.
+
 How `django-inspector` plugs into the host Django project, and what external surfaces it touches.
 
 ## Host Django Project Integration Points
