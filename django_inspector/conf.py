@@ -1,4 +1,5 @@
 from django.conf import settings as django_settings
+from django.core.signals import setting_changed
 
 DEFAULTS = {
     "INSPECTOR_ENABLED": True,
@@ -35,12 +36,42 @@ DEFAULTS = {
 }
 
 
-def _get_inspector_settings():
+_cached = None
+
+
+def _build_settings():
     user_settings = getattr(django_settings, "DJANGO_INSPECTOR", {})
     merged = {**DEFAULTS, **user_settings}
     if "WATCHERS" in user_settings:
         merged["WATCHERS"] = {**DEFAULTS["WATCHERS"], **user_settings["WATCHERS"]}
     return merged
+
+
+def _get_inspector_settings():
+    """
+    The merged settings, built once. Settings are read on every event, so
+    rebuilding the dict each time was measurable overhead; the cache is
+    cleared whenever DJANGO_INSPECTOR changes (override_settings, the pytest
+    settings fixture).
+    """
+    global _cached
+    merged = _cached
+    if merged is None:
+        merged = _cached = _build_settings()
+    return merged
+
+
+def _clear_cache():
+    global _cached
+    _cached = None
+
+
+def _on_setting_changed(setting, **kwargs):
+    if setting == "DJANGO_INSPECTOR":
+        _clear_cache()
+
+
+setting_changed.connect(_on_setting_changed)
 
 
 class InspectorSettings:

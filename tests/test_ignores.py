@@ -188,3 +188,15 @@ class TestDashboardPathsAreNotTraced(TestCase):
         request = self._run("/inspectors-guide/")
         assert hasattr(request, "inspector_trace_id")
         assert Event.objects.filter(event_type="request.completed").exists()
+
+
+class TestInvalidIgnorePattern:
+    def test_invalid_regex_is_skipped_and_the_rest_still_apply(self, caplog):
+        from django.test import override_settings
+
+        from django_inspector.ignores import should_ignore_path
+
+        with override_settings(DJANGO_INSPECTOR={"IGNORE_PATHS": ["(unclosed", r"^/healthz$"]}):
+            with caplog.at_level("WARNING", logger="django_inspector"):
+                assert should_ignore_path("/healthz")
+        assert "not a valid regex" in caplog.text

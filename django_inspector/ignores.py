@@ -11,6 +11,8 @@ import logging
 import re
 from functools import lru_cache
 
+from django.core.signals import setting_changed
+
 logger = logging.getLogger("django_inspector")
 
 
@@ -22,8 +24,19 @@ def _get_path_patterns_key():
 
 
 def _compiled_path_patterns():
-    patterns = _get_path_patterns_key()
-    return [re.compile(p) for p in patterns]
+    return _compiled_patterns(_get_path_patterns_key())
+
+
+@lru_cache(maxsize=4)
+def _compiled_patterns(patterns):
+    """Compile each IGNORE_PATHS regex once; invalid ones are logged and skipped."""
+    compiled = []
+    for pattern in patterns:
+        try:
+            compiled.append(re.compile(pattern))
+        except re.error:
+            logger.warning("inspector: IGNORE_PATHS entry %r is not a valid regex", pattern)
+    return tuple(compiled)
 
 
 @lru_cache(maxsize=1)
@@ -68,9 +81,18 @@ def should_ignore_exception(exc: BaseException) -> bool:
 
 
 def invalidate_ignore_caches() -> None:
-    """Clear compiled pattern caches. Call after override_settings in tests."""
+    """Clear compiled pattern caches. Runs automatically when DJANGO_INSPECTOR changes."""
     _get_path_patterns_key.cache_clear()
+    _compiled_patterns.cache_clear()
     _compiled_exception_classes.cache_clear()
+
+
+def _on_setting_changed(setting, **kwargs):
+    if setting == "DJANGO_INSPECTOR":
+        invalidate_ignore_caches()
+
+
+setting_changed.connect(_on_setting_changed)
 
 
 def is_dashboard_path(path: str) -> bool:
