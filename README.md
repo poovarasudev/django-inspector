@@ -122,6 +122,10 @@ DJANGO_INSPECTOR = {
 | `LOG_LEVEL_THRESHOLD` | `"WARNING"` | Minimum level the log watcher records: a level name or number. |
 | `INSPECTOR_RAISE_ERRORS` | `False` | Re-raise the inspector's own internal errors instead of logging them. Useful in development and tests. |
 
+### Configuration checks
+
+`manage.py check` (and `runserver`/`migrate`) validates the configuration: unknown keys (with a "did you mean" hint), out-of-range or wrongly typed values, invalid regexes and IP ranges, unimportable dotted paths, a missing or misplaced middleware, a `DASHBOARD_URL_PREFIX` that doesn't match where the dashboard is mounted, and a production dashboard protected by `is_staff` alone. Warnings use the ids `django_inspector.W001`–`W008` and can be silenced with `SILENCED_SYSTEM_CHECKS`.
+
 ## Dashboard access
 
 By default, only staff users (`user.is_staff`) can open the dashboard; everyone else gets a 403. You can tighten or replace that check:
@@ -137,7 +141,7 @@ DJANGO_INSPECTOR = {
 
 The allowlist checks `REMOTE_ADDR` unless you set `TRUSTED_PROXY_COUNT` to the number of reverse proxies in front of Django. `X-Forwarded-For` is never trusted beyond those hops, so a client can't spoof its way past the allowlist.
 
-When both are set, the request must pass both. When `DEBUG = False` and neither is set, the app logs a startup warning: in production, staff status alone is often not the protection you want.
+When both are set, the request must pass both. When `DEBUG = False` and neither is set, the system check `django_inspector.W008` warns you: in production, staff status alone is often not the protection you want.
 
 The dashboard has these pages:
 - **Live Feed**
