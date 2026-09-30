@@ -12,6 +12,7 @@ from typing import Optional, Tuple
 from urllib.parse import urlencode
 
 from django.http import QueryDict
+from django.utils import timezone
 
 from django_inspector.client_ip import get_client_ip
 from django_inspector.conf import inspector_settings
@@ -51,6 +52,7 @@ class RequestWatcher(BaseWatcher):
     def on_request(self, request):
         """Called by middleware at start of request. Stores start time."""
         request._inspector_start_time = time.monotonic()
+        request._inspector_started_at = timezone.now()
 
     def on_response(self, request, response):
         """
@@ -92,7 +94,17 @@ class RequestWatcher(BaseWatcher):
         metadata["session_id"] = _get_session_id(request)
         metadata["client_ip"] = get_client_ip(request)
 
-        self.record("request.completed", metadata)
+        from django_inspector.storage.flush import dropped_count
+
+        dropped = dropped_count()
+        if dropped:
+            metadata["events_dropped"] = dropped
+
+        # Stamped with the request's start so it precedes its trace's events.
+        self.record(
+            "request.completed", metadata,
+            timestamp=getattr(request, "_inspector_started_at", None),
+        )
 
 
 def _extract_headers(meta: dict) -> dict:

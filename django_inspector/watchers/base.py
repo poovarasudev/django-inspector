@@ -58,7 +58,7 @@ class BaseWatcher(abc.ABC):
         self._enabled = False
         logger.debug("django-inspector: %s watcher disabled", self.watcher_name)
 
-    def record(self, event_type: str, metadata: dict) -> None:
+    def record(self, event_type: str, metadata: dict, timestamp=None) -> None:
         """
         Buffer a watcher event for the current request trace.
 
@@ -66,6 +66,7 @@ class BaseWatcher(abc.ABC):
             event_type: Dotted string, e.g. "sql.query". Conventionally
                         "{watcher_name}.{event_kind}".
             metadata:   Dict of event-specific data. Must be JSON-serializable.
+            timestamp:  When the event happened; defaults to now.
         """
         if not self._enabled:
             return
@@ -95,7 +96,7 @@ class BaseWatcher(abc.ABC):
             )
             masked = {"masking_failed": True, "error_type": type(exc).__name__}
 
-        buffer_event(trace_id=trace_id, event_type=event_type, metadata=masked)
+        buffer_event(trace_id=trace_id, event_type=event_type, metadata=masked, timestamp=timestamp)
 
     @abc.abstractmethod
     def install_hooks(self) -> None:

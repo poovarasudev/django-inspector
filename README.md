@@ -108,6 +108,7 @@ DJANGO_INSPECTOR = {
 | `SQL_SLOW_THRESHOLD_MS` | `100` | Queries at or above this duration are flagged as slow. |
 | `SQL_CAPTURE_PARAMS` | `True` | Store bound SQL parameters. They can hold secrets (for example a token being inserted) and are only masked by value pattern, not by column name. Set `False` to store the SQL text only. |
 | `MAX_BODY_SIZE` | `8192` | Request and response bodies are truncated to this many bytes. |
+| `MAX_EVENTS_PER_TRACE` | `1000` | Most events stored per request. Later ones are dropped and counted in the request's `events_dropped`; the request event itself is always kept. `0` means no limit. |
 | `SENSITIVE_KEYS` | `[]` | Extra keys to redact, added to the built-in list (password, token, secret, api_key, authorization, cookie, csrf, session, …). |
 | `SAMPLING_RATE` | `1.0` | Fraction of successful requests to keep (0.0–1.0). 5xx responses are always kept. |
 | `SLOW_REQUEST_THRESHOLD_MS` | `1000` | Requests at or above this latency are always kept, whatever the sampling rate. |

@@ -94,21 +94,7 @@ def request_detail(request, pk):
         "signal_dispatches": len(signal_dispatches),
     }
 
-    # Compute waterfall offsets for trace events
-    waterfall_events = []
-    total_ms = latency_ms or 1  # avoid zero division
-    for e in trace_events:
-        offset_ms = (e.timestamp - event.timestamp).total_seconds() * 1000
-        duration_ms = e.metadata.get("duration_ms", 0) or e.metadata.get("latency_ms", 0) or 0
-        offset_pct = max(0, min(100, (offset_ms / total_ms) * 100))
-        width_pct = max(0.5, min(100 - offset_pct, (duration_ms / total_ms) * 100))
-        waterfall_events.append({
-            "event": e,
-            "offset_ms": round(offset_ms, 2),
-            "duration_ms": round(duration_ms, 2),
-            "offset_pct": round(offset_pct, 2),
-            "width_pct": round(width_pct, 2),
-        })
+    waterfall_events = _waterfall(trace_events, event)
 
     view = request.GET.get("view", "timeline")
     if view not in ("timeline", "tabs", "waterfall"):
@@ -292,6 +278,34 @@ def template_detail(request, pk):
         "parent_request": parent_request,
     }
     return render(request, "inspector/template_renders/detail.html", context)
+
+
+def _waterfall(trace_events, request_event):
+    """
+    Bar positions for the waterfall view. The request event is stamped with
+    the request's start; other events are stamped when they finished, so a
+    bar starts at (timestamp - duration).
+    """
+    start = request_event.timestamp
+    total_ms = request_event.metadata.get("latency_ms") or 1  # avoid zero division
+    rows = []
+    for e in trace_events:
+        if e.pk == request_event.pk:
+            offset_ms, duration_ms = 0.0, request_event.metadata.get("latency_ms") or 0
+        else:
+            duration_ms = e.metadata.get("duration_ms") or 0
+            end_ms = (e.timestamp - start).total_seconds() * 1000
+            offset_ms = max(0.0, end_ms - duration_ms)
+        offset_pct = max(0, min(100, (offset_ms / total_ms) * 100))
+        width_pct = max(0.5, min(100 - offset_pct, (duration_ms / total_ms) * 100))
+        rows.append({
+            "event": e,
+            "offset_ms": round(offset_ms, 2),
+            "duration_ms": round(duration_ms, 2),
+            "offset_pct": round(offset_pct, 2),
+            "width_pct": round(width_pct, 2),
+        })
+    return rows
 
 
 def _cache_hits_and_misses(cache_events):

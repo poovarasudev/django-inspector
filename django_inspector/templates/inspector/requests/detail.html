@@ -14,6 +14,10 @@
     </h1>
 </div>
 
+{% if event.metadata.events_dropped %}
+<p class="inspector-notice">{{ event.metadata.events_dropped }} more event{{ event.metadata.events_dropped|pluralize }} happened in this request but {{ event.metadata.events_dropped|pluralize:"was,were" }} not stored: the trace reached <code>MAX_EVENTS_PER_TRACE</code>.</p>
+{% endif %}
+
 <!-- Summary cards -->
 <div class="inspector-summary">
     <div class="inspector-summary-card">

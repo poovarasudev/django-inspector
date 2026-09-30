@@ -397,3 +397,41 @@ class TestSidebarVersion(DashboardTestCase):
 
         assert __version__ == "0.2.0"
         assert "v0.2.0" in self.body("live-feed")
+
+
+class TestWaterfallOffsets(TestCase):
+    """Events keep their capture time, so offsets now mean something."""
+
+    def test_offsets_start_at_the_request_and_subtract_the_duration(self):
+        import datetime
+
+        from django.utils import timezone
+
+        from django_inspector.dashboard.views import _waterfall
+
+        start = timezone.now()
+        request_event = Event.objects.create(
+            trace_id=TRACE, event_type="request.completed",
+            metadata={"latency_ms": 100}, timestamp=start,
+        )
+        # A 20 ms query recorded when it finished, 50 ms into the request.
+        query = Event.objects.create(
+            trace_id=TRACE, event_type="sql.query", metadata={"duration_ms": 20},
+            timestamp=start + datetime.timedelta(milliseconds=50),
+        )
+        rows = {row["event"].pk: row for row in _waterfall([request_event, query], request_event)}
+        assert rows[request_event.pk]["offset_ms"] == 0
+        assert rows[request_event.pk]["width_pct"] == 100
+        assert rows[query.pk]["offset_ms"] == 30
+        assert rows[query.pk]["offset_pct"] == 30
+        assert rows[query.pk]["width_pct"] == 20
+
+
+class TestDroppedEventsNotice(DashboardTestCase):
+    def test_request_detail_says_how_many_events_were_dropped(self):
+        event = Event.objects.create(
+            trace_id=TRACE, event_type="request.completed",
+            metadata={"method": "GET", "path": "/x/", "status_code": 200, "events_dropped": 7},
+        )
+        body = self.body("request-detail", event.pk)
+        assert "7 more events happened in this request" in body
