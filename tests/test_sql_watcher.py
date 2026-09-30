@@ -6,9 +6,11 @@ from django.db import connection
 
 from django_inspector.watchers.sql import (
     SQLWatcher,
+    MAX_PARAM_LENGTH,
+    MAX_PARAMS,
+    MAX_SQL_LENGTH,
+    _QueryStats,
     _normalize_sql,
-    _detect_n_plus_one,
-    _detect_duplicates,
     _is_inspector_query,
     _safe_params,
     clear_query_log,
@@ -125,39 +127,122 @@ class TestNormalizeSql:
 
 class TestNPlusOneDetection:
     def test_detects_repeated_queries(self):
-        """SQL-06: Detects N+1 when 3+ similar queries exist."""
-        query_log = [
-            {"sql": "SELECT * FROM books WHERE author_id = 1", "params": ["1"]},
-            {"sql": "SELECT * FROM books WHERE author_id = 2", "params": ["2"]},
-            {"sql": "SELECT * FROM books WHERE author_id = 3", "params": ["3"]},
-        ]
-        assert _detect_n_plus_one("SELECT * FROM books WHERE author_id = 4", query_log) is True
+        """SQL-06: the third similar query is flagged as N+1."""
+        stats = _QueryStats()
+        for i in (1, 2):
+            similar, _ = stats.add("SELECT * FROM books WHERE author_id = %d" % i, None)
+            assert similar < 3
+        similar, _ = stats.add("SELECT * FROM books WHERE author_id = 3", None)
+        assert similar == 3
 
-    def test_no_false_positive(self):
-        """No N+1 for fewer than 3 similar queries."""
-        query_log = [
-            {"sql": "SELECT * FROM books WHERE author_id = 1", "params": ["1"]},
-        ]
-        assert _detect_n_plus_one("SELECT * FROM books WHERE author_id = 2", query_log) is False
+    def test_different_tables_are_not_similar(self):
+        stats = _QueryStats()
+        stats.add("SELECT * FROM books WHERE id = 1", None)
+        stats.add("SELECT * FROM books WHERE id = 2", None)
+        similar, _ = stats.add("SELECT * FROM authors WHERE id = 3", None)
+        assert similar == 1
 
 
 class TestDuplicateDetection:
     def test_detects_exact_duplicates(self):
-        """SQL-07: Detects identical queries."""
-        query_log = [
-            {"sql": "SELECT * FROM users WHERE id = 1", "params": ["1"]},
-            {"sql": "SELECT * FROM users WHERE id = 1", "params": ["1"]},
-        ]
-        count = _detect_duplicates("SELECT * FROM users WHERE id = 1", ["1"], query_log)
-        assert count == 2
+        """SQL-07: identical SQL and params are counted."""
+        stats = _QueryStats()
+        stats.add("SELECT * FROM users WHERE id = %s", [1])
+        _, exact = stats.add("SELECT * FROM users WHERE id = %s", [1])
+        assert exact == 2
 
-    def test_no_false_positive_different_params(self):
-        """Different params = not a duplicate."""
-        query_log = [
-            {"sql": "SELECT * FROM users WHERE id = 1", "params": ["1"]},
-        ]
-        count = _detect_duplicates("SELECT * FROM users WHERE id = 1", ["2"], query_log)
-        assert count == 0
+    def test_different_params_are_not_duplicates(self):
+        stats = _QueryStats()
+        stats.add("SELECT * FROM users WHERE id = %s", [1])
+        _, exact = stats.add("SELECT * FROM users WHERE id = %s", [2])
+        assert exact == 1
+
+    def test_clear_resets_counts(self):
+        stats = _QueryStats()
+        stats.add("SELECT 1", None)
+        stats.clear()
+        assert len(stats) == 0
+        assert stats.add("SELECT 1", None) == (1, 1)
+
+
+class TestDetectionScalesLinearly(TestCase):
+    """Detection used to re-normalise every earlier query: O(n^2) per request."""
+
+    def setUp(self):
+        self.watcher = SQLWatcher()
+        self.watcher.enable()
+        self.token = set_trace_id(generate_trace_id())
+        clear_query_log()
+
+    def tearDown(self):
+        self.watcher.disable()
+        clear_trace_id(self.token)
+
+    def test_each_query_is_normalised_once(self):
+        from unittest import mock
+
+        import django_inspector.watchers.sql as sql_module
+
+        calls = []
+        original = sql_module._normalize_sql
+
+        def counting(sql):
+            calls.append(sql)
+            return original(sql)
+
+        with mock.patch.object(sql_module, "_normalize_sql", counting):
+            with connection.cursor() as cursor:
+                for i in range(300):
+                    cursor.execute("SELECT %s", [i])
+        assert len(calls) == 300
+
+
+class TestCaptureLimits(TestCase):
+    def setUp(self):
+        self.watcher = SQLWatcher()
+        self.watcher.enable()
+        self.token = set_trace_id(generate_trace_id())
+        clear_buffer()
+        clear_query_log()
+
+    def tearDown(self):
+        self.watcher.disable()
+        clear_trace_id(self.token)
+
+    def _last_query(self):
+        return [e for e in _get_buffer() if e["event_type"] == "sql.query"][-1]["metadata"]
+
+    @override_settings(DJANGO_INSPECTOR={"SQL_CAPTURE_PARAMS": False})
+    def test_params_can_be_turned_off(self):
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT %s", ["tok-123"])
+            cursor.execute("SELECT %s", ["tok-123"])
+        meta = self._last_query()
+        assert meta["params"] is None
+        assert meta["params_omitted"] is True
+        assert meta["is_duplicate"] is True  # detection still sees the params
+
+    def test_long_sql_is_truncated(self):
+        long_sql = "SELECT 1" + " " * MAX_SQL_LENGTH + "-- end"
+        with connection.cursor() as cursor:
+            cursor.execute(long_sql)
+        meta = self._last_query()
+        assert len(meta["sql"]) == MAX_SQL_LENGTH
+        assert meta["sql_truncated"] is True
+
+    def test_params_are_bounded(self):
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT %s", ["x" * (MAX_PARAM_LENGTH * 3)])
+        param = self._last_query()["params"][0]
+        assert len(param) == MAX_PARAM_LENGTH + len("...")
+
+    def test_param_count_is_bounded(self):
+        placeholders = ", ".join(["%s"] * (MAX_PARAMS + 20))
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT " + placeholders, list(range(MAX_PARAMS + 20)))
+        meta = self._last_query()
+        assert len(meta["params"]) == MAX_PARAMS
+        assert meta["params_truncated"] is True
 
 
 class TestSafeParams:

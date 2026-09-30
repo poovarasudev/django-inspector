@@ -106,6 +106,7 @@ DJANGO_INSPECTOR = {
 | `WATCHERS` | see [Watchers](#watchers) | Turn individual watchers on or off. |
 | `DASHBOARD_URL_PREFIX` | `"inspector/"` | Where `dashboard.urls` is mounted. Requests under it are never traced. |
 | `SQL_SLOW_THRESHOLD_MS` | `100` | Queries at or above this duration are flagged as slow. |
+| `SQL_CAPTURE_PARAMS` | `True` | Store bound SQL parameters. They can hold secrets (for example a token being inserted) and are only masked by value pattern, not by column name. Set `False` to store the SQL text only. |
 | `MAX_BODY_SIZE` | `8192` | Request and response bodies are truncated to this many bytes. |
 | `SENSITIVE_KEYS` | `[]` | Extra keys to redact, added to the built-in list (password, token, secret, api_key, authorization, cookie, csrf, session, …). |
 | `SAMPLING_RATE` | `1.0` | Fraction of successful requests to keep (0.0–1.0). 5xx responses are always kept. |

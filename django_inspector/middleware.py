@@ -151,40 +151,36 @@ class InspectorMiddleware:
         reset_query_log(query_log_token)
         reset_buffer(buffer_token)
 
+    @staticmethod
+    def _request_watcher():
+        from django_inspector.watchers import registry
+
+        watcher = registry.get_instance("request")
+        if watcher is not None and watcher.is_enabled:
+            return watcher
+        return None
+
     def _notify_request_start(self, request):
         """Notify the request watcher at start of request."""
         try:
-            from django_inspector.watchers.request import RequestWatcher
-            from django_inspector.watchers import registry
-
-            watcher_cls = registry.get("request")
-            if watcher_cls is not None:
-                # Find the active instance from the app config
-                from django.apps import apps
-                app = apps.get_app_config("django_inspector")
-                for inst in getattr(app, "_watcher_instances", []):
-                    if isinstance(inst, RequestWatcher) and inst.is_enabled:
-                        inst.on_request(request)
-                        break
+            watcher = self._request_watcher()
+            if watcher is not None:
+                watcher.on_request(request)
         except Exception:
             if inspector_settings.INSPECTOR_RAISE_ERRORS:
                 raise
-            logger.debug("inspector: error in _notify_request_start", exc_info=True)
+            logger.warning("inspector: error in _notify_request_start", exc_info=True)
 
     def _notify_request_end(self, request, response):
         """Notify the request watcher at end of request (before flush)."""
         try:
-            from django_inspector.watchers.request import RequestWatcher
-            from django.apps import apps
-            app = apps.get_app_config("django_inspector")
-            for inst in getattr(app, "_watcher_instances", []):
-                if isinstance(inst, RequestWatcher) and inst.is_enabled:
-                    inst.on_response(request, response)
-                    break
+            watcher = self._request_watcher()
+            if watcher is not None:
+                watcher.on_response(request, response)
         except Exception:
             if inspector_settings.INSPECTOR_RAISE_ERRORS:
                 raise
-            logger.debug("inspector: error in _notify_request_end", exc_info=True)
+            logger.warning("inspector: error in _notify_request_end", exc_info=True)
 
     def _flush(self):
         try:
@@ -200,4 +196,4 @@ class InspectorMiddleware:
         except Exception:
             if inspector_settings.INSPECTOR_RAISE_ERRORS:
                 raise
-            logger.debug("inspector: clear_query_log failed", exc_info=True)
+            logger.warning("inspector: clear_query_log failed", exc_info=True)

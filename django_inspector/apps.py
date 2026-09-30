@@ -79,3 +79,4 @@ class DjangoInspectorConfig(AppConfig):
             if inspector_settings.watcher_enabled(name):
                 watcher.enable()
             self._watcher_instances.append(watcher)
+            registry.set_instance(name, watcher)

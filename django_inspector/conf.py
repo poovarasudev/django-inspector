@@ -13,6 +13,7 @@ DEFAULTS = {
     },
     "DASHBOARD_URL_PREFIX": "inspector/",  # must match where the host mounts django_inspector.dashboard.urls; requests under it are never traced
     "SQL_SLOW_THRESHOLD_MS": 100,
+    "SQL_CAPTURE_PARAMS": True,         # store bound SQL parameters (they are never masked by column name)
     "MAX_BODY_SIZE": 8192,
     "SENSITIVE_KEYS": [],               # extra keys to redact (merged additive with built-in defaults in masking.py)
     "SAMPLING_RATE": 1.0,               # fraction of successful requests to capture (0.0–1.0); errors always captured

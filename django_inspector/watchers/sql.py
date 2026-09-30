@@ -6,35 +6,73 @@ Requirements: SQL-01..SQL-07
 """
 
 import logging
+import re
 import time
+from collections import Counter
 from contextvars import ContextVar
-from typing import Union
+from functools import lru_cache
+from typing import Tuple, Union
 
 from django.db import connections
 
 from django_inspector.conf import inspector_settings
 from django_inspector.tracing.context import get_current_trace_id
 from django_inspector.watchers.base import BaseWatcher
+from django_inspector.watchers import registry
 from django_inspector.watchers.registry import register
 from django_inspector.watchers.utils import extract_origin
 
 logger = logging.getLogger("django_inspector")
 
+MAX_SQL_LENGTH = 10000   # characters of SQL text stored per query
+MAX_PARAMS = 100          # parameters stored per query
+MAX_PARAM_LENGTH = 500    # characters stored per parameter
+
+
+class _QueryStats:
+    """
+    Per-request counts for N+1 and duplicate detection. Each query is
+    normalised once and counted in O(1), so detection stays linear in the
+    number of queries (it used to re-scan every earlier query).
+    """
+
+    __slots__ = ("similar", "exact")
+
+    def __init__(self):
+        self.similar = Counter()  # normalised SQL -> count
+        self.exact = Counter()    # hash of (SQL, params) -> count
+
+    def add(self, sql, params) -> Tuple[int, int]:
+        """Count one query; return (similar count, exact duplicate count)."""
+        normalized = _normalize_sql(sql)
+        self.similar[normalized] += 1
+        key = hash((sql, _params_key(params)))
+        self.exact[key] += 1
+        return self.similar[normalized], self.exact[key]
+
+    def clear(self):
+        self.similar.clear()
+        self.exact.clear()
+
+    def __len__(self):
+        return sum(self.similar.values())
+
+
 _query_log_var: ContextVar = ContextVar("inspector_query_log", default=None)
 
 
-def _get_query_log():
-    """Per-request query log for N+1 and duplicate detection (ContextVar-based, async-safe)."""
+def _get_query_log() -> _QueryStats:
+    """Per-request query stats for N+1 and duplicate detection (ContextVar-based, async-safe)."""
     log = _query_log_var.get()
     if log is None:
-        log = []
+        log = _QueryStats()
         _query_log_var.set(log)
     return log
 
 
 def start_query_log():
-    """Give the current request its own query log; returns a token for reset_query_log()."""
-    return _query_log_var.set([])
+    """Give the current request its own query stats; returns a token for reset_query_log()."""
+    return _query_log_var.set(_QueryStats())
 
 
 def reset_query_log(token):
@@ -130,42 +168,35 @@ def _query_wrapper(execute, sql, params, many, context):
     slow_threshold = inspector_settings.SQL_SLOW_THRESHOLD_MS
     is_slow = duration_ms >= slow_threshold
 
-    # Build metadata
+    # SQL-06/07: N+1 (3+ similar queries) and exact duplicates, counted in O(1)
+    similar_count, duplicate_count = _get_query_log().add(sql, params)
+
     metadata = {
-        "sql": sql,
-        "params": _safe_params(params),
+        "sql": sql[:MAX_SQL_LENGTH],
         "duration_ms": duration_ms,
         "db_alias": db_alias,
         "origin_file": origin.get("file"),
         "origin_line": origin.get("line"),
         "origin_function": origin.get("function"),
         "is_slow": is_slow,
+        "n_plus_one": similar_count >= 3,
+        "is_duplicate": duplicate_count > 1,
+        "duplicate_count": duplicate_count,
     }
+    if len(sql) > MAX_SQL_LENGTH:
+        metadata["sql_truncated"] = True
+    if inspector_settings.SQL_CAPTURE_PARAMS:
+        metadata["params"] = _safe_params(params)
+        if isinstance(params, (list, tuple, dict)) and len(params) > MAX_PARAMS:
+            metadata["params_truncated"] = True
+    else:
+        metadata["params"] = None
+        metadata["params_omitted"] = True
 
-    # Track for N+1 and duplicate detection
-    query_log = _get_query_log()
-    query_log.append({"sql": sql, "params": _safe_params(params)})
-
-    # SQL-06: N+1 detection — check for repeated similar queries
-    n_plus_one = _detect_n_plus_one(sql, query_log)
-    metadata["n_plus_one"] = n_plus_one
-
-    # SQL-07: Duplicate detection — exact same SQL+params
-    duplicate_count = _detect_duplicates(sql, params, query_log)
-    metadata["is_duplicate"] = duplicate_count > 1
-    metadata["duplicate_count"] = duplicate_count
-
-    # Record via the watcher's record() method (which goes through base class)
-    from django_inspector.watchers import registry
-    watcher_cls = registry.get("sql")
-    if watcher_cls is not None:
-        from django.apps import apps
+    watcher = registry.get_instance("sql")
+    if watcher is not None and watcher.is_enabled:
         try:
-            app = apps.get_app_config("django_inspector")
-            for inst in getattr(app, "_watcher_instances", []):
-                if isinstance(inst, SQLWatcher) and inst.is_enabled:
-                    inst.record("sql.query", metadata)
-                    break
+            watcher.record("sql.query", metadata)
         except Exception:
             if inspector_settings.INSPECTOR_RAISE_ERRORS:
                 raise
@@ -181,62 +212,48 @@ def _is_inspector_query(sql: str) -> bool:
 
 
 def _safe_params(params) -> Union[list, dict, str, None]:
-    """Safely convert query params to a serializable format."""
+    """Serialisable, bounded copy of query params: at most MAX_PARAMS, each cut to MAX_PARAM_LENGTH."""
     if params is None:
         return None
     try:
         if isinstance(params, (list, tuple)):
-            return [str(p) for p in params]
+            return [_short(p) for p in params[:MAX_PARAMS]]
         if isinstance(params, dict):
-            return {str(k): str(v) for k, v in params.items()}
-        return str(params)
+            items = list(params.items())[:MAX_PARAMS]
+            return {str(k): _short(v) for k, v in items}
+        return _short(params)
     except Exception:
         return "<unserializable>"
 
 
-def _detect_n_plus_one(sql: str, query_log: list) -> bool:
-    """
-    Detect N+1 pattern: 3+ similar queries for the same table with
-    different parameters (typically different PKs).
-
-    SQL-06: Repeated queries for same table with different PKs.
-    """
-    if len(query_log) < 3:
-        return False
-
-    # Normalize SQL: strip parameter values to get a "template"
-    normalized = _normalize_sql(sql)
-    similar_count = sum(1 for q in query_log if _normalize_sql(q["sql"]) == normalized)
-    return similar_count >= 3
+def _short(value) -> str:
+    text = str(value)
+    if len(text) > MAX_PARAM_LENGTH:
+        return text[:MAX_PARAM_LENGTH] + "..."
+    return text
 
 
-def _detect_duplicates(sql: str, params, query_log: list) -> int:
-    """
-    Detect duplicate identical queries (same SQL + same params).
-
-    SQL-07: Exact duplicates within a single request.
-    """
-    safe_params = _safe_params(params)
-    count = 0
-    for q in query_log:
-        if q["sql"] == sql and q["params"] == safe_params:
-            count += 1
-    return count
+def _params_key(params):
+    """A hashable stand-in for params, used only for duplicate detection."""
+    try:
+        return repr(params)
+    except Exception:
+        return id(params)
 
 
+_QUOTED = re.compile(r"'[^']*'")
+_NUMBER = re.compile(r"\b\d+\b")
+
+
+@lru_cache(maxsize=2048)
 def _normalize_sql(sql: str) -> str:
     """
     Normalize SQL by replacing literal values with placeholders.
     Used for N+1 pattern comparison.
     """
-    import re
-    # Replace quoted strings
-    normalized = re.sub(r"'[^']*'", "'?'", sql)
-    # Replace numbers
-    normalized = re.sub(r"\b\d+\b", "?", normalized)
-    # Replace parameter placeholders (%s, ?)
-    normalized = re.sub(r"%s", "?", normalized)
-    return normalized.strip()
+    normalized = _QUOTED.sub("'?'", sql)
+    normalized = _NUMBER.sub("?", normalized)
+    return normalized.replace("%s", "?").strip()
 
 
 # Auto-register on import
