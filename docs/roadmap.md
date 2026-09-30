@@ -273,6 +273,7 @@ Work items:
 **Goal**: Outgoing `requests`/`httpx` calls appear in the trace.
 **Depends on**: Phase 12
 **Requirements**: HTTP-01..03
+**Spec**: [2026-09-30-http-client-watcher-design.md](superpowers/specs/2026-09-30-http-client-watcher-design.md)
 **Success Criteria** (what must be TRUE):
   1. A `requests` or `httpx` (sync or async) call during a trace records an `http.request` event with method, masked URL, status, duration and error.
   2. Without `requests`/`httpx` installed, the package imports and the watcher does nothing.
