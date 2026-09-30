@@ -5,6 +5,7 @@ import json
 import pytest
 from django.http import HttpResponse
 from django.test import RequestFactory, TestCase, override_settings
+from django.urls.resolvers import ResolverMatch
 
 from django_inspector.storage.flush import _get_buffer, clear_buffer
 from django_inspector.tracing.context import clear_trace_id, generate_trace_id, set_trace_id
@@ -13,6 +14,10 @@ from django_inspector.watchers.request import (
     _extract_headers,
     _get_user_info,
 )
+
+
+def _dummy_view(request, pk):
+    pass
 
 
 @pytest.fixture(autouse=True)
@@ -136,6 +141,28 @@ class TestRequestWatcher(TestCase):
         self.watcher.on_request(request)
         self.watcher.on_response(request, HttpResponse("ok"))
         assert _get_buffer()[0]["metadata"]["client_ip"] == "203.0.113.9"
+
+    def test_records_route_and_view_for_a_resolved_url(self):
+        """DASH-04: endpoint grouping needs the URL pattern and view, not raw path."""
+        request = self.factory.get("/orders/42/")
+        request.resolver_match = ResolverMatch(
+            _dummy_view, (), {"pk": 42}, route="orders/<int:pk>/"
+        )
+        self.watcher.on_request(request)
+        self.watcher.on_response(request, HttpResponse("ok"))
+
+        meta = _get_buffer()[0]["metadata"]
+        assert meta["route"] == "orders/<int:pk>/"
+        assert meta["view"] == "tests.test_request_watcher._dummy_view"
+
+    def test_route_and_view_are_none_for_an_unresolved_url(self):
+        request = self.factory.get("/api/test/")
+        self.watcher.on_request(request)
+        self.watcher.on_response(request, HttpResponse("ok"))
+
+        meta = _get_buffer()[0]["metadata"]
+        assert meta["route"] is None
+        assert meta["view"] is None
 
 
 class TestExtractHeaders:
