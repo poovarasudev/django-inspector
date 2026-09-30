@@ -69,6 +69,10 @@
         <div class="inspector-summary-card__value">{{ summary.signal_dispatches }}</div>
         <div class="inspector-summary-card__label">Signal Dispatches</div>
     </div>
+    <div class="inspector-summary-card">
+        <div class="inspector-summary-card__value">{{ summary.mail_sent }}</div>
+        <div class="inspector-summary-card__label">Mail Sent</div>
+    </div>
 </div>
 
 <!-- View switcher -->
@@ -83,7 +87,7 @@
 <div class="inspector-card">
     <div class="inspector-timeline">
         {% for e in trace_events %}
-        <div class="inspector-timeline-item {% if e.event_type == 'sql.query' %}inspector-timeline-item--sql{% elif e.event_type == 'exception.raised' %}inspector-timeline-item--exception{% elif e.event_type in cache_event_types %}inspector-timeline-item--cache{% elif e.event_type == 'template.rendered' %}inspector-timeline-item--template{% elif e.event_type == 'log.record' %}inspector-timeline-item--log{% elif e.event_type == 'signal.dispatched' %}inspector-timeline-item--signal{% else %}inspector-timeline-item--request{% endif %}">
+        <div class="inspector-timeline-item {% if e.event_type == 'sql.query' %}inspector-timeline-item--sql{% elif e.event_type == 'exception.raised' %}inspector-timeline-item--exception{% elif e.event_type in cache_event_types %}inspector-timeline-item--cache{% elif e.event_type == 'template.rendered' %}inspector-timeline-item--template{% elif e.event_type == 'log.record' %}inspector-timeline-item--log{% elif e.event_type == 'signal.dispatched' %}inspector-timeline-item--signal{% elif e.event_type == 'mail.sent' %}inspector-timeline-item--mail{% else %}inspector-timeline-item--request{% endif %}">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                 <strong style="font-size: 12px; text-transform: uppercase; color: var(--ins-text-secondary);">
                     {% if e.event_type == "request.completed" %}Request
@@ -93,6 +97,7 @@
                     {% elif e.event_type == "template.rendered" %}Template
                     {% elif e.event_type == "log.record" %}Log · {{ e.metadata.level_name }}
                     {% elif e.event_type == "signal.dispatched" %}Signal
+                    {% elif e.event_type == "mail.sent" %}Mail
                     {% else %}{{ e.event_type }}{% endif %}
                 </strong>
                 <span style="font-size: 12px; color: var(--ins-text-secondary);">{{ e.timestamp|timesince }} ago</span>
@@ -133,6 +138,14 @@
                     {{ e.metadata.sender|default:"-" }} · {{ e.metadata.receiver_count }} receiver{{ e.metadata.receiver_count|pluralize }} · {{ e.metadata.duration_ms }}ms
                     {% if e.metadata.error %}<span class="inspector-indicator inspector-indicator--slow">ERROR</span>{% endif %}
                 </div>
+            {% elif e.event_type == "mail.sent" %}
+                <div>{{ e.metadata.subject|default:"(no subject)"|truncatechars:100 }}</div>
+                <div style="font-size: 12px; color: var(--ins-text-secondary);">
+                    {{ e.metadata.to|join:", "|truncatechars:80 }}
+                    {% if e.metadata.status == "sent" %}<span class="inspector-indicator inspector-indicator--hit">SENT</span>
+                    {% elif e.metadata.status == "failed" %}<span class="inspector-indicator inspector-indicator--miss">FAILED</span>
+                    {% elif e.metadata.status == "error" %}<span class="inspector-indicator inspector-indicator--slow">ERROR</span>{% endif %}
+                </div>
             {% endif %}
         </div>
         {% endfor %}
@@ -150,6 +163,7 @@
         <button class="inspector-tab" type="button" data-inspector-tab="templates-tab">Templates ({{ template_renders|length }})</button>
         <button class="inspector-tab" type="button" data-inspector-tab="logs-tab">Logs ({{ log_records|length }})</button>
         <button class="inspector-tab" type="button" data-inspector-tab="signals-tab">Signals ({{ signal_dispatches|length }})</button>
+        <button class="inspector-tab" type="button" data-inspector-tab="mail-tab">Mail ({{ mail_events|length }})</button>
     </div>
 
     <div id="request-tab" class="inspector-tab-panel inspector-tab-panel--active">
@@ -328,6 +342,33 @@
             </tbody>
         </table>
     </div>
+
+    <div id="mail-tab" class="inspector-tab-panel">
+        <table class="inspector-table">
+            <thead>
+                <tr>
+                    <th>Subject</th>
+                    <th>To</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in mail_events %}
+                <tr>
+                    <td><a href="{% url 'inspector:mail-detail' m.pk %}">{{ m.metadata.subject|default:"(no subject)"|truncatechars:100 }}</a></td>
+                    <td class="inspector-code-inline">{{ m.metadata.to|join:", "|truncatechars:80 }}</td>
+                    <td>
+                        {% if m.metadata.status == "sent" %}<span class="inspector-indicator inspector-indicator--hit">SENT</span>
+                        {% elif m.metadata.status == "failed" %}<span class="inspector-indicator inspector-indicator--miss">FAILED</span>
+                        {% elif m.metadata.status == "error" %}<span class="inspector-indicator inspector-indicator--slow">ERROR</span>{% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3" style="text-align: center; padding: 20px; color: var(--ins-text-secondary);">No mail sent in this trace.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 
 <!-- Waterfall view -->
@@ -344,10 +385,11 @@
                 {% elif wf.event.event_type == "template.rendered" %}Template
                 {% elif wf.event.event_type == "log.record" %}Log
                 {% elif wf.event.event_type == "signal.dispatched" %}Signal
+                {% elif wf.event.event_type == "mail.sent" %}Mail
                 {% else %}{{ wf.event.event_type }}{% endif %}
             </div>
             <div class="inspector-waterfall-track">
-                <div class="inspector-waterfall-bar {% if wf.event.event_type == 'request.completed' %}inspector-waterfall-bar--request{% elif wf.event.event_type == 'sql.query' %}inspector-waterfall-bar--sql{% elif wf.event.event_type == 'exception.raised' %}inspector-waterfall-bar--exception{% elif wf.event.event_type in cache_event_types %}inspector-waterfall-bar--cache{% elif wf.event.event_type == 'template.rendered' %}inspector-waterfall-bar--template{% elif wf.event.event_type == 'log.record' %}inspector-waterfall-bar--log{% elif wf.event.event_type == 'signal.dispatched' %}inspector-waterfall-bar--signal{% endif %}"
+                <div class="inspector-waterfall-bar {% if wf.event.event_type == 'request.completed' %}inspector-waterfall-bar--request{% elif wf.event.event_type == 'sql.query' %}inspector-waterfall-bar--sql{% elif wf.event.event_type == 'exception.raised' %}inspector-waterfall-bar--exception{% elif wf.event.event_type in cache_event_types %}inspector-waterfall-bar--cache{% elif wf.event.event_type == 'template.rendered' %}inspector-waterfall-bar--template{% elif wf.event.event_type == 'log.record' %}inspector-waterfall-bar--log{% elif wf.event.event_type == 'signal.dispatched' %}inspector-waterfall-bar--signal{% elif wf.event.event_type == 'mail.sent' %}inspector-waterfall-bar--mail{% endif %}"
                      style="margin-left: {{ wf.offset_pct }}%; width: {{ wf.width_pct }}%;">
                     {{ wf.duration_ms }}ms
                 </div>

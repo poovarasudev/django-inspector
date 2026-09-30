@@ -246,6 +246,21 @@ def signal_event(signal, sender, receivers, **extra):
     return Event.objects.create(trace_id=TRACE, event_type="signal.dispatched", metadata=data)
 
 
+def mail_event(subject, to, trace_id=TRACE, **extra):
+    data = {
+        "subject": subject, "from_email": "shop@example.com", "to": to,
+        "cc": [], "bcc": [], "reply_to": [], "text_body": "hi", "text_body_truncated": False,
+        "html_body": None, "html_body_truncated": False, "attachments": [], "headers": {},
+        "backend": "django.core.mail.backends.locmem.EmailBackend",
+        "message_class": "django.core.mail.message.EmailMultiAlternatives",
+        "status": "sent", "duration_ms": 1.0,
+    }
+    data.update(extra)
+    return Event.objects.create(
+        trace_id=trace_id, event_type="mail.sent", metadata=data, duration_ms=data["duration_ms"]
+    )
+
+
 class TestLogPages(DashboardTestCase):
     def setUp(self):
         self.warning = log_event("WARNING", "stock running low", logger_name="shop.inventory")
@@ -353,6 +368,82 @@ class TestSignalPages(DashboardTestCase):
         assert reverse("inspector:signals-list") in self.body("live-feed")
 
 
+class TestMailPages(DashboardTestCase):
+    def setUp(self):
+        self.sent = mail_event("Welcome aboard", ["alice@example.com", "bob@example.com"])
+        self.failed = mail_event(
+            "Weekly digest", ["carol@example.com"], status="failed",
+            backend="django.core.mail.backends.smtp.EmailBackend",
+        )
+        self.sql = Event.objects.create(trace_id=TRACE, event_type="sql.query", metadata={"sql": "SELECT 1"})
+
+    def test_list_shows_only_mail_events(self):
+        body = self.body("mail-list")
+        assert "Welcome aboard" in body
+        assert "Weekly digest" in body
+        assert "SELECT 1" not in body
+
+    def test_list_shows_first_two_recipients_and_a_count(self):
+        mail_event("Group send", ["a@example.com", "b@example.com", "c@example.com"])
+        body = self.body("mail-list")
+        assert "a@example.com, b@example.com" in body
+        assert "+1 more" in body
+
+    def test_filter_by_to(self):
+        body = self.body("mail-list", params={"to": "carol"})
+        assert "Weekly digest" in body
+        assert "Welcome aboard" not in body
+
+    def test_filter_by_subject(self):
+        body = self.body("mail-list", params={"subject": "welcome"})
+        assert "Welcome aboard" in body
+        assert "Weekly digest" not in body
+
+    def test_filter_by_status(self):
+        body = self.body("mail-list", params={"status": "failed"})
+        assert "Weekly digest" in body
+        assert "Welcome aboard" not in body
+
+    def test_htmx_request_returns_table_partial(self):
+        body = self.body("mail-list", htmx=True)
+        assert "<table" in body
+        assert "inspector-sidebar" not in body
+
+    def test_detail_shows_headers_and_trace_link(self):
+        body = self.body("mail-detail", self.sent.pk)
+        assert "Welcome aboard" in body
+        assert "alice@example.com" in body
+        assert reverse("inspector:trace-detail", args=[self.sent.trace_id]) in body
+        assert reverse("inspector:mail-eml", args=[self.sent.pk]) in body
+
+    def test_detail_404s_for_non_mail_event(self):
+        with pytest.raises(Http404):
+            self.get("mail-detail", self.sql.pk)
+
+    def test_detail_embeds_preview_in_a_sandboxed_iframe(self):
+        with_html = mail_event("Has HTML", ["to@example.com"], html_body="<p>hi</p>")
+        body = self.body("mail-detail", with_html.pk)
+        assert '<iframe sandbox src="%s"' % reverse("inspector:mail-preview", args=[with_html.pk]) in body
+        assert "allow-scripts" not in body
+        assert "allow-same-origin" not in body
+
+    def test_detail_without_html_has_no_iframe(self):
+        body = self.body("mail-detail", self.sent.pk)
+        assert "<iframe" not in body
+
+    def test_detail_lists_attachments(self):
+        with_attachment = mail_event(
+            "Invoice", ["to@example.com"],
+            attachments=[{"filename": "invoice.pdf", "mimetype": "application/pdf", "size": 1024}],
+        )
+        body = self.body("mail-detail", with_attachment.pk)
+        assert "invoice.pdf" in body
+        assert "1024 bytes" in body
+
+    def test_sidebar_links_to_mail(self):
+        assert reverse("inspector:mail-list") in self.body("live-feed")
+
+
 class TestRequestDetailLogsAndSignals(DashboardTestCase):
     def setUp(self):
         self.request_event = Event.objects.create(
@@ -390,6 +481,35 @@ class TestRequestDetailLogsAndSignals(DashboardTestCase):
         body = self.body("request-detail", self.request_event.pk, params={"view": "waterfall"})
         assert "inspector-waterfall-bar--log" in body
         assert "inspector-waterfall-bar--signal" in body
+
+
+class TestRequestDetailMail(DashboardTestCase):
+    def setUp(self):
+        self.request_event = Event.objects.create(
+            trace_id=TRACE, event_type="request.completed",
+            metadata={"method": "POST", "path": "/signup/", "status_code": 200, "latency_ms": 20.0},
+        )
+        self.mail = mail_event("Verify your email", ["new-user@example.com"])
+
+    def test_summary_counts_mail_sent(self):
+        import re
+
+        body = self.body("request-detail", self.request_event.pk)
+        assert re.search(r'__value">1</div>\s*<div class="inspector-summary-card__label">Mail Sent', body)
+
+    def test_timeline_labels_mail_events(self):
+        body = self.body("request-detail", self.request_event.pk)
+        assert "inspector-timeline-item--mail" in body
+        assert "Verify your email" in body
+
+    def test_tabs_view_has_a_mail_tab_linking_to_mail_detail(self):
+        body = self.body("request-detail", self.request_event.pk, params={"view": "tabs"})
+        assert "Mail (1)" in body
+        assert reverse("inspector:mail-detail", args=[self.mail.pk]) in body
+
+    def test_waterfall_colours_mail_bars(self):
+        body = self.body("request-detail", self.request_event.pk, params={"view": "waterfall"})
+        assert "inspector-waterfall-bar--mail" in body
 
 
 class TestSidebarVersion(DashboardTestCase):

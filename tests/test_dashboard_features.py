@@ -571,3 +571,113 @@ class TestPinning(DashboardClient):
         Event.objects.filter(trace_id=TRACE).update(pinned=True)
         body = self.body("requests-list")
         assert "inspector-badge--pinned" in body
+
+
+def mail_event(trace_id=TRACE, **metadata):
+    data = {
+        "subject": "Welcome", "from_email": "from@example.com", "to": ["to@example.com"],
+        "cc": [], "bcc": [], "reply_to": [], "text_body": "hi", "text_body_truncated": False,
+        "html_body": None, "html_body_truncated": False, "attachments": [], "headers": {},
+        "backend": "django.core.mail.backends.locmem.EmailBackend",
+        "message_class": "django.core.mail.message.EmailMultiAlternatives",
+        "status": "sent", "duration_ms": 1.0,
+    }
+    data.update(metadata)
+    return Event.objects.create(
+        trace_id=trace_id, event_type="mail.sent", metadata=data, duration_ms=data["duration_ms"]
+    )
+
+
+class TestMailPreview(DashboardClient):
+    def test_preview_returns_the_html_body_with_the_exact_locked_down_csp(self):
+        event = mail_event(html_body="<p>Hello <script>alert(1)</script></p>")
+        response = self.get("mail-preview", event.pk)
+        assert response.status_code == 200
+        assert response["Content-Type"].startswith("text/html")
+        assert response.content.decode() == "<p>Hello <script>alert(1)</script></p>"
+        assert response["Content-Security-Policy"] == (
+            "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; "
+            "sandbox; frame-ancestors 'self'"
+        )
+
+    def test_preview_sets_x_frame_options_sameorigin(self):
+        event = mail_event(html_body="<p>hi</p>")
+        assert self.get("mail-preview", event.pk)["X-Frame-Options"] == "SAMEORIGIN"
+
+    def test_preview_404s_without_an_html_body(self):
+        from django.http import Http404
+
+        event = mail_event(html_body=None)
+        with pytest.raises(Http404):
+            self.get("mail-preview", event.pk)
+
+    def test_preview_404s_for_a_non_mail_event(self):
+        from django.http import Http404
+
+        other = request_event()
+        with pytest.raises(Http404):
+            self.get("mail-preview", other.pk)
+
+    def test_preview_requires_access(self):
+        event = mail_event(html_body="<p>hi</p>")
+        assert self.get("mail-preview", event.pk, user=AnonymousUser()).status_code == 403
+
+
+class TestMailEml(DashboardClient):
+    def test_eml_round_trips_subject_recipients_and_bodies(self):
+        import email
+
+        event = mail_event(
+            subject="Reset your password", from_email="noreply@example.com",
+            to=["user@example.com"], text_body="Click here", html_body="<p>Click here</p>",
+            attachments=[{"filename": "terms.pdf", "mimetype": "application/pdf", "size": 2048}],
+        )
+        response = self.get("mail-eml", event.pk)
+        assert response.status_code == 200
+        assert response["Content-Type"] == "message/rfc822"
+        assert 'filename="reset-your-password.eml"' in response["Content-Disposition"]
+
+        parsed = email.message_from_bytes(response.content)
+        assert parsed["Subject"] == "Reset your password"
+        assert parsed["To"] == "user@example.com"
+        assert "terms.pdf" in parsed["X-Inspector-Omitted-Attachments"]
+
+        text_body = html_body = None
+        for part in parsed.walk():
+            if part.get_content_type() == "text/plain":
+                text_body = part.get_payload(decode=True).decode()
+            elif part.get_content_type() == "text/html":
+                html_body = part.get_payload(decode=True).decode()
+        assert text_body == "Click here"
+        assert html_body == "<p>Click here</p>"
+
+    def test_eml_never_includes_attachment_contents(self):
+        import email
+
+        event = mail_event(
+            attachments=[{"filename": "terms.pdf", "mimetype": "application/pdf", "size": 2048}],
+        )
+        response = self.get("mail-eml", event.pk)
+        parsed = email.message_from_bytes(response.content)
+        # The attachment is only ever named in the omitted-attachments header,
+        # never as a MIME part: its content was never stored to include.
+        assert parsed["X-Inspector-Omitted-Attachments"] == "terms.pdf"
+        assert not any(part.get_filename() == "terms.pdf" for part in parsed.walk())
+
+    def test_eml_falls_back_to_a_mail_pk_filename_without_a_subject(self):
+        event = mail_event(subject="")
+        response = self.get("mail-eml", event.pk)
+        assert 'filename="mail-%s.eml"' % event.pk in response["Content-Disposition"]
+
+    def test_eml_requires_access(self):
+        event = mail_event()
+        assert self.get("mail-eml", event.pk, user=AnonymousUser()).status_code == 403
+
+
+class TestMailListAndDetailAccess(DashboardClient):
+    def test_list_requires_access(self):
+        assert self.get("mail-list", user=AnonymousUser()).status_code == 403
+
+    def test_detail_requires_access(self):
+        event = mail_event()
+        assert self.get("mail-detail", event.pk, user=AnonymousUser()).status_code == 403

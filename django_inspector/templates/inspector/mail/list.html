@@ -1,0 +1,39 @@
+{% extends "inspector/base.html" %}
+{% load inspector_tags %}
+{% block title %}Mail — Inspector{% endblock %}
+{% block content %}
+<div class="inspector-page-header">
+    <h1>Mail</h1>
+    <a class="inspector-btn" href="?{% csv_query %}">Export CSV</a>
+</div>
+
+<form class="inspector-filter-bar"
+      hx-get="{% url 'inspector:mail-list' %}"
+      hx-target="#results-table"
+      hx-push-url="true"
+      hx-trigger="change, keyup changed delay:300ms from:input[type=search]">
+    <label>
+        To
+        <input type="search" name="to" value="{{ filters.to|default:'' }}" placeholder="contains…">
+    </label>
+    <label>
+        Subject
+        <input type="search" name="subject" value="{{ filters.subject|default:'' }}" placeholder="contains…">
+    </label>
+    <label>
+        Status
+        <select name="status">
+            <option value="">All</option>
+            <option value="sent" {% if filters.status == "sent" %}selected{% endif %}>Sent</option>
+            <option value="failed" {% if filters.status == "failed" %}selected{% endif %}>Failed</option>
+            <option value="error" {% if filters.status == "error" %}selected{% endif %}>Error</option>
+        </select>
+    </label>
+</form>
+
+<div id="results-table">
+    {% include "inspector/mail/_table.html" %}
+</div>
+
+{% include "inspector/_pagination.html" %}
+{% endblock %}

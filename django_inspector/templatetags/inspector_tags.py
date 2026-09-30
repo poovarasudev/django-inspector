@@ -31,3 +31,11 @@ def csv_query(context):
     params.pop("page", None)
     params["format"] = "csv"
     return params.urlencode()
+
+
+@register.filter
+def dotted_tail(value):
+    """The last dotted segment of a value, e.g. a backend or message class's dotted path."""
+    if not value:
+        return value
+    return str(value).rsplit(".", 1)[-1]

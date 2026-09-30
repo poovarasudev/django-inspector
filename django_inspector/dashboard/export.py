@@ -96,6 +96,13 @@ TRACE_COLUMNS = COMMON_COLUMNS + [
     ("status", _meta("status")),
 ]
 
+MAIL_COLUMNS = COMMON_COLUMNS + [
+    ("subject", _meta("subject")),
+    ("to", _meta("to")),
+    ("status", _meta("status")),
+    ("backend", _meta("backend")),
+]
+
 
 def _rows(qs, columns):
     yield [header for header, _ in columns]

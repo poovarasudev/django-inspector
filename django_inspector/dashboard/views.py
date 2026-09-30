@@ -3,12 +3,15 @@ import os
 from functools import lru_cache
 
 from django.conf import settings
+from django.core.mail import EmailMultiAlternatives
 from django.core.paginator import Paginator
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.functional import cached_property
+from django.utils.text import slugify
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
@@ -21,6 +24,15 @@ from django_inspector.watchers.cache import CACHE_EVENT_TYPES
 CACHE_OPERATIONS = [event_type.split(".", 1)[1] for event_type in CACHE_EVENT_TYPES]
 LOG_LEVELS = [(10, "DEBUG"), (20, "INFO"), (30, "WARNING"), (40, "ERROR"), (50, "CRITICAL")]
 PAGE_SIZE = 25
+
+# The mail preview serves untrusted, attacker-influenced HTML: no scripts, no
+# remote loads, no framing beyond the dashboard's own same-origin iframe.
+# The dashboard's CSP helper (auth.inspector_required) only adds its own
+# policy when none is set, so this one stands unchanged.
+MAIL_PREVIEW_CSP = (
+    "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; "
+    "sandbox; frame-ancestors 'self'"
+)
 MAX_DETAIL_EVENTS = 2000  # events shown on one request's page
 
 # Issues page window choices (DASH-04); an unrecognised ?window= falls back to 24h.
@@ -190,6 +202,7 @@ def request_detail(request, pk):
     cache_hits, cache_misses = _cache_hits_and_misses(cache_events)
     log_records = [e for e in trace_events if e.event_type == "log.record"]
     signal_dispatches = [e for e in trace_events if e.event_type == "signal.dispatched"]
+    mail_events = [e for e in trace_events if e.event_type == "mail.sent"]
 
     total_query_time = sum(e.metadata.get("duration_ms", 0) for e in queries)
     slow_queries = sum(1 for e in queries if e.metadata.get("is_slow"))
@@ -211,6 +224,7 @@ def request_detail(request, pk):
         "template_renders": len(template_renders),
         "log_records": len(log_records),
         "signal_dispatches": len(signal_dispatches),
+        "mail_sent": len(mail_events),
     }
 
     waterfall_events = _waterfall(trace_events, event)
@@ -232,6 +246,7 @@ def request_detail(request, pk):
         "cache_event_types": CACHE_EVENT_TYPES,
         "log_records": log_records,
         "signal_dispatches": signal_dispatches,
+        "mail_events": mail_events,
         "trace_truncated": trace_truncated,
         "max_detail_events": MAX_DETAIL_EVENTS,
     }
@@ -671,3 +686,88 @@ def _parent_request(event):
     return Event.objects.filter(
         trace_id=event.trace_id, event_type="request.completed"
     ).first()
+
+
+def mail_list(request):
+    qs = Event.objects.filter(event_type="mail.sent").order_by("-timestamp")
+
+    to = request.GET.get("to", "")
+    subject = request.GET.get("subject", "")
+    status = request.GET.get("status", "")
+
+    if to:
+        qs = qs.filter(metadata__to__icontains=to)
+    if subject:
+        qs = qs.filter(metadata__subject__icontains=subject)
+    if status in ("sent", "failed", "error"):
+        qs = qs.filter(metadata__status=status)
+    qs = _filter_dates(request, qs)
+
+    if request.GET.get("format") == "csv":
+        return export.csv_response(qs, export.MAIL_COLUMNS, "mail.csv")
+
+    page = _paginate(request, qs)
+    context = {"page": page, "filters": request.GET}
+
+    if request.headers.get("HX-Request"):
+        return render(request, "inspector/mail/_table.html", context)
+    return render(request, "inspector/mail/list.html", context)
+
+
+def mail_detail(request, pk):
+    event = get_object_or_404(Event, pk=pk, event_type="mail.sent")
+    return render(request, "inspector/mail/detail.html", {"event": event})
+
+
+@xframe_options_sameorigin
+def mail_preview(request, pk):
+    """
+    The stored HTML body, rendered nowhere but here: a sandboxed, scriptless,
+    same-origin iframe target with its own locked-down CSP (MAIL-03).
+    """
+    event = get_object_or_404(Event, pk=pk, event_type="mail.sent")
+    html_body = event.metadata.get("html_body")
+    if html_body is None:
+        raise Http404("This message has no HTML body.")
+    response = HttpResponse(html_body, content_type="text/html; charset=utf-8")
+    response["Content-Security-Policy"] = MAIL_PREVIEW_CSP
+    return response
+
+
+def mail_eml(request, pk):
+    """
+    Rebuilds the message from its stored (already-masked) fields as a MIME
+    document — no connection, never sent. Attachment contents were never
+    stored, so they're listed in a header instead of included (MAIL-02).
+    """
+    event = get_object_or_404(Event, pk=pk, event_type="mail.sent")
+    message = _rebuild_email_message(event.metadata)
+    response = HttpResponse(message.message().as_bytes(), content_type="message/rfc822")
+    response["Content-Disposition"] = 'attachment; filename="%s"' % _eml_filename(event)
+    return response
+
+
+def _rebuild_email_message(metadata):
+    message = EmailMultiAlternatives(
+        subject=metadata.get("subject") or "",
+        body=metadata.get("text_body") or "",
+        from_email=metadata.get("from_email") or None,
+        to=list(metadata.get("to") or []),
+        cc=list(metadata.get("cc") or []),
+        bcc=list(metadata.get("bcc") or []),
+        reply_to=list(metadata.get("reply_to") or []),
+        headers=dict(metadata.get("headers") or {}),
+    )
+    html_body = metadata.get("html_body")
+    if html_body:
+        message.attach_alternative(html_body, "text/html")
+    attachments = metadata.get("attachments") or []
+    if attachments:
+        names = ", ".join(a.get("filename") or "(unnamed)" for a in attachments)
+        message.extra_headers["X-Inspector-Omitted-Attachments"] = names
+    return message
+
+
+def _eml_filename(event):
+    slug = slugify(event.metadata.get("subject") or "")
+    return "%s.eml" % (slug or "mail-%s" % event.pk)

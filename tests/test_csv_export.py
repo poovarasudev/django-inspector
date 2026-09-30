@@ -116,6 +116,21 @@ def trace_completed_event(trace=TRACE, **metadata):
     )
 
 
+def mail_event(trace=TRACE, **metadata):
+    data = {
+        "subject": "Welcome", "from_email": "from@example.com", "to": ["to@example.com"],
+        "cc": [], "bcc": [], "reply_to": [], "text_body": "hi", "text_body_truncated": False,
+        "html_body": None, "html_body_truncated": False, "attachments": [], "headers": {},
+        "backend": "django.core.mail.backends.locmem.EmailBackend",
+        "message_class": "django.core.mail.message.EmailMultiAlternatives",
+        "status": "sent", "duration_ms": 1.0,
+    }
+    data.update(metadata)
+    return Event.objects.create(
+        trace_id=trace, event_type="mail.sent", metadata=data, duration_ms=data["duration_ms"]
+    )
+
+
 class TestRequestsCsv(CsvClient):
     def test_header_content_type_and_filename(self):
         request_event(path="/orders/")
@@ -247,6 +262,21 @@ class TestTracesCsv(CsvClient):
         assert row["status"] == "ok"
 
 
+class TestMailCsv(CsvClient):
+    def test_header_and_row(self):
+        mail_event(subject="Reset your password", to=["alice@example.com"], status="failed")
+        rows, response = self.csv("mail-list")
+        assert 'filename="mail.csv"' in response["Content-Disposition"]
+        assert rows[0] == [
+            "timestamp", "trace_id", "event_type", "duration_ms", "subject", "to", "status", "backend",
+        ]
+        row = _as_dicts(rows)[0]
+        assert row["subject"] == "Reset your password"
+        assert row["to"] == "['alice@example.com']"
+        assert row["status"] == "failed"
+        assert row["backend"] == "django.core.mail.backends.locmem.EmailBackend"
+
+
 class TestCsvBehaviour(CsvClient):
     """Behaviour shared by every list's export, exercised once via requests."""
 
@@ -313,3 +343,6 @@ class TestExportLinksOnListPages(CsvClient):
 
     def test_traces_list_has_an_export_link(self):
         assert "Export CSV" in self.body("traces-list")
+
+    def test_mail_list_has_an_export_link(self):
+        assert "Export CSV" in self.body("mail-list")

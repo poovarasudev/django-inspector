@@ -28,4 +28,8 @@ urlpatterns = [
     path("logs/<int:pk>/", inspector_required(views.log_detail), name="log-detail"),
     path("signals/", inspector_required(views.signals_list), name="signals-list"),
     path("signals/<int:pk>/", inspector_required(views.signal_detail), name="signal-detail"),
+    path("mail/", inspector_required(views.mail_list), name="mail-list"),
+    path("mail/<int:pk>/", inspector_required(views.mail_detail), name="mail-detail"),
+    path("mail/<int:pk>/preview/", inspector_required(views.mail_preview), name="mail-preview"),
+    path("mail/<int:pk>/message.eml", inspector_required(views.mail_eml), name="mail-eml"),
 ]

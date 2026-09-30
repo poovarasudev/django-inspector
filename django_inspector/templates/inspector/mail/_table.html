@@ -1,0 +1,35 @@
+{% load inspector_tags %}
+<table class="inspector-table">
+    <thead>
+        <tr>
+            <th>To</th>
+            <th>Subject</th>
+            <th>Status</th>
+            <th>Backend</th>
+            <th>Time</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for event in page.object_list %}
+        <tr>
+            <td>
+                <a href="{% url 'inspector:mail-detail' event.pk %}">{{ event.metadata.to|slice:":2"|join:", " }}</a>
+                {% if event.metadata.to|length > 2 %}<span style="color: var(--ins-text-secondary);">+{{ event.metadata.to|length|add:"-2" }} more</span>{% endif %}
+            </td>
+            <td>{{ event.metadata.subject|truncatechars:80 }}</td>
+            <td>
+                {% if event.metadata.status == "sent" %}<span class="inspector-indicator inspector-indicator--hit">SENT</span>
+                {% elif event.metadata.status == "failed" %}<span class="inspector-indicator inspector-indicator--miss">FAILED</span>
+                {% elif event.metadata.status == "error" %}<span class="inspector-indicator inspector-indicator--slow">ERROR</span>
+                {% endif %}
+            </td>
+            <td class="inspector-code-inline">{{ event.metadata.backend|dotted_tail }}</td>
+            <td>{{ event.timestamp|timesince }} ago</td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="5" style="text-align: center; padding: 40px; color: var(--ins-text-secondary);">No mail sent found.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
