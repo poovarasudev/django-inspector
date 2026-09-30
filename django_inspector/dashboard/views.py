@@ -13,6 +13,7 @@ from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
 from django_inspector.conf import inspector_settings
+from django_inspector.dashboard import export
 from django_inspector.dashboard import issues as issues_data
 from django_inspector.storage.models import Event
 from django_inspector.watchers.cache import CACHE_EVENT_TYPES
@@ -157,6 +158,9 @@ def requests_list(request):
         qs = qs.filter(trace_id=trace)
     qs = _filter_dates(request, qs)
 
+    if request.GET.get("format") == "csv":
+        return export.csv_response(qs, export.REQUEST_COLUMNS, "requests.csv")
+
     page = _paginate(request, qs)
     context = {"page": page, "filters": request.GET}
 
@@ -294,6 +298,9 @@ def traces_list(request):
         qs = qs.filter(event_type=_TRACE_TYPE_FILTERS[type_])
     qs = _filter_dates(request, qs)
 
+    if request.GET.get("format") == "csv":
+        return export.csv_response(qs, export.TRACE_COLUMNS, "traces.csv")
+
     page = _paginate(request, qs)
     context = {"page": page, "filters": request.GET}
 
@@ -389,6 +396,9 @@ def queries_list(request):
     if db_alias:
         qs = qs.filter(metadata__db_alias=db_alias)
 
+    if request.GET.get("format") == "csv":
+        return export.csv_response(qs, export.QUERY_COLUMNS, "queries.csv")
+
     page = _paginate(request, qs)
     context = {"page": page, "filters": request.GET}
 
@@ -414,6 +424,9 @@ def exceptions_list(request):
     if exc_type:
         qs = qs.filter(metadata__exception_type=exc_type)
     qs = _filter_dates(request, qs)
+
+    if request.GET.get("format") == "csv":
+        return export.csv_response(qs, export.EXCEPTION_COLUMNS, "exceptions.csv")
 
     page = _paginate(request, qs)
 
@@ -463,6 +476,9 @@ def cache_list(request):
     if key:
         qs = qs.filter(metadata__key__icontains=key)
 
+    if request.GET.get("format") == "csv":
+        return export.csv_response(qs, export.CACHE_COLUMNS, "cache.csv")
+
     page = _paginate(request, qs)
     context = {
         "page": page,
@@ -493,6 +509,9 @@ def templates_list(request):
         qs = qs.filter(metadata__name__icontains=name)
     if request.GET.get("top_level") == "on":
         qs = qs.filter(metadata__depth=0)
+
+    if request.GET.get("format") == "csv":
+        return export.csv_response(qs, export.TEMPLATE_COLUMNS, "templates.csv")
 
     page = _paginate(request, qs)
     context = {"page": page, "filters": request.GET}
@@ -591,6 +610,9 @@ def logs_list(request):
     if message:
         qs = qs.filter(metadata__message__icontains=message)
 
+    if request.GET.get("format") == "csv":
+        return export.csv_response(qs, export.LOG_COLUMNS, "logs.csv")
+
     page = _paginate(request, qs)
     context = {"page": page, "filters": request.GET, "levels": LOG_LEVELS}
 
@@ -615,6 +637,9 @@ def signals_list(request):
         qs = qs.filter(metadata__signal=signal)
     if sender:
         qs = qs.filter(metadata__sender__icontains=sender)
+
+    if request.GET.get("format") == "csv":
+        return export.csv_response(qs, export.SIGNAL_COLUMNS, "signals.csv")
 
     page = _paginate(request, qs)
     context = {
