@@ -164,11 +164,11 @@ Work items:
   5. Filtering requests by method, status or path uses the columns (no JSON lookup in the query).
 
 Work items:
-- [ ] Migration and write-time column filling
-- [ ] SQL and exception fingerprints
-- [ ] Pinning (model, retention, dashboard toggle)
-- [ ] Read-only admin
-- [ ] Dashboard filters on columns
+- [x] Migration and write-time column filling
+- [x] SQL and exception fingerprints
+- [x] Pinning (model, retention, dashboard toggle)
+- [x] Read-only admin
+- [x] Dashboard filters on columns
 
 ---
 
@@ -302,7 +302,7 @@ Work items:
 | 5. Cache & Template Watchers | v1.1 | 1/1 | Complete | 2026-09-30 |
 | 6. Signal & Logging Watchers | v1.1 | 1/1 | Complete | 2026-09-30 |
 | 7. ASGI Verification & Release Prep | v1.1 | 1/1 | Complete | 2026-09-30 |
-| 8. Event Schema v2 | v1.2 | 0/1 | Planned | - |
+| 8. Event Schema v2 | v1.2 | 1/1 | Complete | 2026-09-30 |
 | 9. Trace API | v1.2 | 0/1 | Planned | - |
 | 10. Management Command Watcher | v1.2 | 0/1 | Planned | - |
 | 11. Query Guard for Tests | v1.2 | 0/1 | Planned | - |
@@ -331,7 +331,6 @@ Carried over from the GSD state file on 2026-09-30:
 |----------|------|--------|-------------|
 | Storage | `AbstractStorageBackend` | Deferred to first non-ORM backend | v1.1 init |
 | Persistence | Async write offload (thread pool / Celery); measure the share of `bulk_create` in the p50 first | Deferred past v1.2 | v1.1 init |
-| Schema | Denormalized event columns (`method`, `status_code`, `path`); 0.2.0 added an `(event_type, -timestamp)` index and capped list counts | Planned: Phase 8 | v1.1 init |
 | Masking | Mask SQL parameters by column name (0.2.0 adds `SQL_CAPTURE_PARAMS` to turn them off) | Deferred | Review |
 | Support | Drop Python 3.8/3.9 and Django < 4.2 (all past end of life) | Planned for 0.3.0 | Review |
 | Plugins | `setuptools` entry_points for external watchers | Deferred | v1.1 init |

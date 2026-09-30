@@ -149,6 +149,10 @@ The dashboard has these pages:
 - **Requests**: each request has a timeline, tabs and a waterfall view of everything in its trace.
 - **Queries**, **Cache**, **Templates**, **Logs**, **Signals** and **Exceptions**: each page has filters.
 
+### Pinning a trace
+
+A request's detail page has a "Pin trace" button next to its trace id. Pinning sets a flag on every event of that trace, which keeps it out of `RETENTION_HOURS` pruning and `inspector_cleanup` — useful for holding on to a specific bug report while everything else keeps expiring. Pinned requests show a "Pinned" badge in the requests list too; "Unpin trace" clears the flag.
+
 ## Production notes
 
 - **Masking.** Before an event is stored, keys matching the sensitive list are redacted anywhere in it. Values holding a Luhn-valid card number or a JWT are also redacted, whatever their key. Masking fails closed: if it ever raises, the event is stored as a `masking_failed` placeholder instead of the original data. Form and JSON bodies (request and response) are parsed and masked before they are stored, and `@sensitive_post_parameters` is honoured. Multipart bodies are only summarised when your view parsed them, binary bodies are stored as a size summary, and the recorded full URL has its sensitive query parameters masked.
@@ -165,7 +169,8 @@ The dashboard has these pages:
 
 - **ASGI.** The middleware handles async requests natively. Database writes and the lazy `request.user` stay in a sync context, and concurrent requests never share trace state.
 - **Failure isolation.** The inspector's own errors are caught and logged to the `django_inspector` logger at WARNING, and your request carries on. Set `INSPECTOR_RAISE_ERRORS = True` to surface them while developing.
-- **Storage.** Events are buffered in memory and written with one `bulk_create` at the end of each request, into a single `Event` table (`trace_id`, `event_type`, `timestamp`, JSON `metadata`).
+- **Storage.** Events are buffered in memory and written with one `bulk_create` at the end of each request, into a single `Event` table (`trace_id`, `event_type`, `timestamp`, JSON `metadata`, plus `method`/`status_code`/`path`/`duration_ms`/`fingerprint`/`parent_trace_id`/`pinned` columns derived from the masked metadata for filtering and grouping).
+- **Admin.** If your project has `django.contrib.admin` installed, `Event` shows up there as a read-only list (no add, change or delete) — filterable by type and pinned, searchable by trace id and fingerprint.
 
 ## Development
 

@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.3.0] - Unreleased
+
+The "v1.2 Phase 8" milestone: real `Event` columns for the fields later phases filter and group on.
+
+### Added
+
+- **Event schema v2** (migration `0003`, `0001`/`0002` untouched; schema-only, no backfill):
+  - New columns `method`, `status_code`, `path` and `duration_ms`, derived at flush time from each event's already-masked metadata by per-event-type extractors in `storage/columns.py`. Values that fail coercion (wrong type, out of range, non-finite) are dropped, leaving the column NULL; a failing extractor logs a warning and still stores the event with NULL columns (or raises under `INSPECTOR_RAISE_ERRORS`). (SCHEMA-01)
+  - A `fingerprint` column, indexed with `event_type`, groups like events: SQL events by normalised query shape and database alias, exceptions by type plus the innermost application frame's file and function (no line number, so it survives unrelated edits). (SCHEMA-02)
+  - A `parent_trace_id` column to link a trace to the trace that started it; only a column in this phase — a later phase fills it. (SCHEMA-03)
+  - A `pinned` flag, set by a staff-only dashboard action, keeps a trace's events out of `RETENTION_HOURS` pruning and `inspector_cleanup` (including its `--dry-run` count). (SCHEMA-04)
+- **Pin a trace** from its request detail page: a "Pin trace"/"Unpin trace" button and a "Pinned" badge, also shown in the requests list. `POST trace/<trace_id>/pin/` updates every event of the trace, protected by `csrf_protect` (so CSRF is enforced even without `CsrfViewMiddleware`) and `require_POST`. (SCHEMA-04)
+- **Read-only Django admin** for `Event`: list, filter by type and pinned, search by trace id and fingerprint; add, change and delete are all denied. Only loaded when the host has `django.contrib.admin` installed. (SCHEMA-05)
+- The requests-list `method`, status-class and `path` filters now query the real columns instead of JSON metadata lookups. (SCHEMA-06)
+
+### Changed
+
+- `watchers.utils._is_library_file` is now the public `is_library_file` (the old name is kept as an alias). `watchers.sql._normalize_sql` now re-exports `storage.columns.normalize_sql`.
+
 ## [0.2.0] - Unreleased
 
 The "v1.1" milestone: finishes the PRD Phase-1 watcher set and makes the package safe to run in production.
