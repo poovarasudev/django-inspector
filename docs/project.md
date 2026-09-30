@@ -32,13 +32,15 @@
 - ✓ **Cache watcher** — get/set/add/delete/clear + `*_many`, key, TTL, backend, alias, hit/miss, value size; off by default (PRD §11.5) — v1.1 (Phase 5)
 - ✓ **Template watcher** — render tree (extends/include), render time, context size, source path; off by default (PRD §11.6) — v1.1 (Phase 5)
 - ✓ Dashboard: Cache and Templates pages; request detail shows cache/template events — v1.1 (Phase 5)
+- ✓ **Signal watcher** — signal, sender, receivers in call order with per-receiver timing and errors; `SIGNAL_WATCH_LIST`; off by default (PRD §11.7) — v1.1 (Phase 6)
+- ✓ **Logging watcher** — logger, level, message, file, line, traceback; `LOG_LEVEL_THRESHOLD` (default WARNING); on by default (PRD §11.4) — v1.1 (Phase 6)
+- ✓ Dashboard: Logs and Signals pages; request detail shows log/signal events — v1.1 (Phase 6)
 
 ### Active
 
-<!-- v1.1 — Finish the remaining PRD Phase-1 watchers (roadmap Phases 6–7). -->
+<!-- v1.1 — Prove ASGI end-to-end and prepare the release (roadmap Phase 7). -->
 
-- [ ] **Signal watcher** — signal, sender, receiver, execution time, ordering (PRD §11.7)
-- [ ] **Logging watcher** — logger, level, message, traceback, file, line, with trace correlation (PRD §11.4)
+- [ ] **ASGI verification and v1.1 release prep** — roadmap Phase 7 (license, README, CI)
 
 ### Out of Scope
 
@@ -65,6 +67,7 @@ This is **not** a greenfield project. v1.0 MVP was completed and tagged on 2026-
 - **Phase 3 — Dashboard + ops** (3 plans, commits `75af996`, `2b58322`, `8b90e3c`): dashboard foundation, `inspector_cleanup`, dashboard pages with HTMX.
 - **Phase 4 — Safety & Hardening** (3 plans, commits `d4dc5db`, `ed5daa5`, `8b483ac`): masking, sampling, dashboard auth, ignore lists, ContextVar buffers, loud-by-default logging. 128 tests passing.
 - **Phase 5 — Cache & Template Watchers** (branch `feat/phase-5-cache-template-watchers`, commits `2ff720f`, `4ef85e6`, `6a7b81a`, `95de13f`, `8012502`, `52ff915`, `6594587`): cache and template watchers, their dashboard pages, and a fix so dashboard requests are no longer traced. 205 tests passing.
+- **Phase 6 — Signal & Logging Watchers** (branch `feat/phase-6-signal-logging-watchers`, commits `0af7e47`, `ffc85fd`, `091f2dd`, `9615f6c`): signal and logging watchers and their dashboard pages. 261 tests passing.
 
 Full brownfield map lives under `docs/architecture/` (STACK, ARCHITECTURE, STRUCTURE, INTEGRATIONS, CONVENTIONS, TESTING, CONCERNS).
 
@@ -110,4 +113,4 @@ Update this document when a spec ships or scope changes:
 4. Decisions to log? → Add to Key Decisions.
 
 ---
-*Last updated: 2026-09-30 — Phase 5 complete*
+*Last updated: 2026-09-30 — Phase 6 complete*

@@ -111,11 +111,12 @@ Work items:
   3. Calling `logging.warning(...)` during a request produces a `log.record` event with logger name, level, message, file, line, and (if present) traceback.
   4. The `django_inspector` logger's own output is excluded from capture.
   5. Configurable level threshold (`LOG_LEVEL_THRESHOLD`) gates which records are captured.
-**Spec**: not started (`docs/superpowers/specs/`)
+**Spec**: [2026-09-30-signal-logging-watchers-design.md](superpowers/specs/2026-09-30-signal-logging-watchers-design.md) · **Plan**: [2026-09-30-signal-logging-watchers.md](superpowers/plans/2026-09-30-signal-logging-watchers.md)
 
 Work items:
-- [ ] Signal watcher
-- [ ] Logging watcher
+- [x] Signal watcher
+- [x] Logging watcher
+- [x] Logs and Signals dashboard pages + request-detail integration
 
 ---
 
@@ -158,8 +159,8 @@ Phases not yet broken down.
 | 3. Dashboard | v1.0 | 3/3 | Complete | 2026-05-03 |
 | 4. Safety & Hardening | v1.1 | 3/3 | Complete | 2026-05-23 |
 | 5. Cache & Template Watchers | v1.1 | 1/1 | Complete | 2026-09-30 |
-| 6. Signal & Logging Watchers | v1.1 | — | Not started (next) | - |
-| 7. ASGI Verification & Release Prep | v1.1 | — | Not started | - |
+| 6. Signal & Logging Watchers | v1.1 | 1/1 | Complete | 2026-09-30 |
+| 7. ASGI Verification & Release Prep | v1.1 | — | Not started (next) | - |
 
 ## How work proceeds
 
@@ -184,4 +185,5 @@ Carried over from the GSD state file on 2026-09-30:
 | Dashboard | Search, comparison, JSON/CSV export | Deferred | v1.1 init |
 | Schema | Capture-time event timestamps (`auto_now_add` is set at flush, so waterfall offsets are meaningless; needs a migration) | Deferred | Phase 5 |
 | Watchers | Jinja2 template renders | Deferred | Phase 5 |
+| Watchers | Watching all signals (only `SIGNAL_WATCH_LIST` is supported) | Deferred | Phase 6 |
 | Watchers | Cache `has_key` / `incr` / `decr` / `touch`; value size for non-str/bytes values | Deferred | Phase 5 |

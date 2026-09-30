@@ -27,21 +27,21 @@ Requirements for the v1.1 milestone: close PRD Phase 1 watchers (Cache, Template
 
 ### Signal Watcher (PRD §11.7)
 
-- [ ] **SIGL-01**: Each signal dispatch is captured with signal name (dotted path), sender (class/model name), and number of receivers
-- [ ] **SIGL-02**: Per-receiver execution time is captured (start → finish), including failures
-- [ ] **SIGL-03**: Receiver ordering is preserved in event metadata (matches dispatch order)
-- [ ] **SIGL-04**: Signal events are correlated to the originating request via `trace_id` when dispatched during a request
-- [ ] **SIGL-05**: Inspector's own signal handlers (e.g., `got_request_exception` in exception watcher) are excluded from capture to prevent self-feeding
-- [ ] **SIGL-06**: User can configure which signals to watch via `SIGNAL_WATCH_LIST` (default: opt-in subset, not "all signals")
+- [x] **SIGL-01**: Each signal dispatch is captured with signal name (dotted path), sender (class/model name), and number of receivers
+- [x] **SIGL-02**: Per-receiver execution time is captured (start → finish), including failures
+- [x] **SIGL-03**: Receiver ordering is preserved in event metadata (matches dispatch order)
+- [x] **SIGL-04**: Signal events are correlated to the originating request via `trace_id` when dispatched during a request
+- [x] **SIGL-05**: Inspector's own signal handlers (e.g., `got_request_exception` in exception watcher) are excluded from capture to prevent self-feeding
+- [x] **SIGL-06**: User can configure which signals to watch via `SIGNAL_WATCH_LIST` (default: opt-in subset, not "all signals") — default is the five model signals; the signal watcher itself is off by default
 
 ### Logging Watcher (PRD §11.4)
 
-- [ ] **LOG-01**: A logging handler installed at startup captures every record routed through Python `logging` at configured level threshold or above
-- [ ] **LOG-02**: Each log event captures logger name, level (numeric + name), message, file, line, and traceback (if exc_info present)
-- [ ] **LOG-03**: Log events are correlated to the originating request via `trace_id` when emitted during a request
-- [ ] **LOG-04**: The inspector's own `django_inspector` logger output is excluded from capture (no self-feeding)
-- [ ] **LOG-05**: Configurable level threshold (`LOG_LEVEL_THRESHOLD` setting; default `WARNING` to avoid flooding)
-- [ ] **LOG-06**: Logging watcher uninstalls cleanly on `disable()`; idempotent
+- [x] **LOG-01**: A logging handler installed at startup captures every record routed through Python `logging` at configured level threshold or above — records that reach the root logger (host logger levels and `propagate=False` are respected); on by default
+- [x] **LOG-02**: Each log event captures logger name, level (numeric + name), message, file, line, and traceback (if exc_info present)
+- [x] **LOG-03**: Log events are correlated to the originating request via `trace_id` when emitted during a request
+- [x] **LOG-04**: The inspector's own `django_inspector` logger output is excluded from capture (no self-feeding)
+- [x] **LOG-05**: Configurable level threshold (`LOG_LEVEL_THRESHOLD` setting; default `WARNING` to avoid flooding)
+- [x] **LOG-06**: Logging watcher uninstalls cleanly on `disable()`; idempotent
 
 ### Sensitive-Data Masking (PRD §14)
 
@@ -157,8 +157,8 @@ Update the status when a spec for that phase ships. Specs and plans in `docs/sup
 | OBS-01..03 | Phase 4 (Safety & Hardening) | Done |
 | CACHE-01..07 | Phase 5 (Cache & Template Watchers) | Done |
 | TMPL-01..05 | Phase 5 (Cache & Template Watchers) | Done |
-| SIGL-01..06 | Phase 6 (Signal & Logging Watchers) | Pending |
-| LOG-01..06 | Phase 6 (Signal & Logging Watchers) | Pending |
+| SIGL-01..06 | Phase 6 (Signal & Logging Watchers) | Done |
+| LOG-01..06 | Phase 6 (Signal & Logging Watchers) | Done |
 | ASYNC-03 | Phase 7 (Async / ASGI verification) | Pending |
 
 **Coverage:**
