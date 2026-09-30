@@ -115,7 +115,7 @@ From the product discovery in `docs/discovery/2026-09-30-next-features.md`. Phas
 - [ ] **CMD-01**: Capture command name, args, options, stdout, stderr (bounded), duration, exit code
 - [ ] **CMD-02**: Commands are traced only when listed in `COMMAND_WATCH_LIST`; `runserver`, `test`, `shell`, `migrate` and `inspector_cleanup` are never traced
 - [ ] **CMD-03**: Long commands flush events in chunks and keep bounded query stats, so memory stays flat and a killed command keeps what it already recorded
-- [ ] **CMD-04**: `/trace/<id>/` shows any trace (request, command, task) instead of redirecting only to a request
+- [ ] **CMD-04**: `/trace/<id>/` shows any trace (request, command, task) instead of redirecting only to a request, plus a Traces list page — delivered in Phase 9, where non-request traces first appear
 
 ### Query Guard for Tests — Phase 11
 
@@ -213,8 +213,8 @@ Update the status when a spec for that phase ships. Specs and plans in `docs/sup
 | LOG-01..06 | Phase 6 (Signal & Logging Watchers) | Done |
 | ASYNC-03 | Phase 7 (Async / ASGI verification) | Done |
 | SCHEMA-01..06 | Phase 8 (Event Schema v2) | Done |
-| TRACE-01..07 | Phase 9 (Trace API) | Planned |
-| CMD-01..04 | Phase 10 (Management Command Watcher) | Planned |
+| TRACE-01..07, CMD-04 | Phase 9 (Trace API) | Planned |
+| CMD-01..03 | Phase 10 (Management Command Watcher) | Planned |
 | TEST-01..04 | Phase 11 (Query Guard for Tests) | Planned |
 | DASH-03, DASH-04 | Phase 12 (Issues Page & CSV Export) | Planned |
 | MAIL-01..03 | Phase 13 (Email Watcher) | Planned |

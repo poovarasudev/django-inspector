@@ -175,7 +175,8 @@ Work items:
 #### Phase 9: Trace API
 **Goal**: A public way to start a trace anywhere, which the middleware itself uses; plus the ways back from an app to its trace.
 **Depends on**: Phase 8
-**Requirements**: TRACE-01..07
+**Requirements**: TRACE-01..07, CMD-04 (moved from Phase 10)
+**Spec**: [2026-09-30-trace-api-design.md](superpowers/specs/2026-09-30-trace-api-design.md)
 **Success Criteria** (what must be TRUE):
   1. `with django_inspector.trace("backfill"):` and `@django_inspector.trace("job")` record SQL, logs and exceptions into one trace, on sync and async code, with no middleware involved.
   2. The existing middleware test suite passes unchanged on top of the trace API, and the benchmark stays within budget.
@@ -183,29 +184,31 @@ Work items:
   4. A failing traced block is always kept; a successful one is kept at `SAMPLING_RATE`.
   5. With `DEBUG` on, responses carry `X-Inspector-Trace`; with it off, they don't (unless the setting says so); unkept traces never get the header.
   6. Adding the filter to a logging handler makes `%(inspector_trace_id)s` usable in its format.
+  7. `/trace/<id>/` renders a `trace()` trace, request traces still open the request page, and a Traces page lists non-request traces.
 
 Work items:
 - [ ] `trace()` context manager / decorator and lifecycle extraction
 - [ ] Middleware rebuilt on `trace()`
 - [ ] `X-Inspector-Trace` header
 - [ ] Trace-id logging filter
+- [ ] General trace page and Traces list (CMD-04)
 
 ---
 
 #### Phase 10: Management Command Watcher
 **Goal**: Each chosen management command run becomes a trace with its SQL, logs and exceptions.
 **Depends on**: Phase 9
-**Requirements**: CMD-01..04
+**Requirements**: CMD-01..03 (CMD-04 shipped in Phase 9)
 **Success Criteria** (what must be TRUE):
   1. Running a command listed in `COMMAND_WATCH_LIST` produces a trace with a `command.completed` event (name, args, options, bounded stdout/stderr, duration, exit code) and its SQL/log/exception events.
   2. Unlisted commands, and `runserver`, `test`, `shell`, `migrate` and `inspector_cleanup` even when listed, record nothing.
   3. A command running 100k queries keeps flat memory, and killing it midway leaves the already-flushed events in the database.
-  4. `/trace/<id>/` renders a command trace; request traces still open the request page.
+  4. Command traces appear on the Traces page and render on `/trace/<id>/`.
 
 Work items:
 - [ ] Command watcher (hook, allowlist, denylist)
 - [ ] Chunked flush and bounded query stats
-- [ ] General trace page
+- [ ] Command traces on the Traces page
 
 ---
 
