@@ -8,6 +8,7 @@ DEFAULTS = {
         "exception": True,
         "cache": False,     # CACHE-07: opt in with {"WATCHERS": {"cache": True}}
         "template": False,  # opt in with {"WATCHERS": {"template": True}}
+        "signal": False,    # SIGL-06: opt in with {"WATCHERS": {"signal": True}}
     },
     "DASHBOARD_URL_PREFIX": "inspector/",  # must match where the host mounts django_inspector.dashboard.urls; requests under it are never traced
     "SQL_SLOW_THRESHOLD_MS": 100,
@@ -19,6 +20,13 @@ DEFAULTS = {
     "INSPECTOR_DASHBOARD_IP_ALLOWLIST": [],  # list of IP address or CIDR strings; empty = no IP restriction
     "IGNORE_PATHS": [],                 # list of regex strings matched against request.path; matching → skip entirely
     "IGNORE_EXCEPTIONS": [],            # list of dotted exception class names; matching → not recorded by exception watcher
+    "SIGNAL_WATCH_LIST": [              # dotted paths of the signals the signal watcher captures
+        "django.db.models.signals.pre_save",
+        "django.db.models.signals.post_save",
+        "django.db.models.signals.pre_delete",
+        "django.db.models.signals.post_delete",
+        "django.db.models.signals.m2m_changed",
+    ],
     "INSPECTOR_RAISE_ERRORS": False,    # if True, inspector-internal errors propagate (useful in dev/tests)
 }
 
