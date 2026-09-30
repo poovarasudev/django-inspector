@@ -14,19 +14,19 @@
 
 ```bash
 # all tests
-uv run pytest
+uv run --extra dev python -m pytest
 
 # verbose
-uv run pytest -v
+uv run --extra dev python -m pytest -v
 
 # single file
-uv run pytest tests/test_sql_watcher.py
+uv run --extra dev python -m pytest tests/test_sql_watcher.py
 
 # single test by node id
-uv run pytest tests/test_sql_watcher.py::test_records_duration
+uv run --extra dev python -m pytest tests/test_sql_watcher.py::test_records_duration
 
 # with coverage
-uv run coverage run -m pytest && uv run coverage report
+uv run --extra dev coverage run -m pytest && uv run --extra dev coverage report
 ```
 
 ## Layout
