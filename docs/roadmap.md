@@ -217,6 +217,7 @@ Work items:
 **Goal**: Catch N+1 and duplicate queries in CI with a message that says where they came from.
 **Depends on**: Phase 7 (independent of 8–10)
 **Requirements**: TEST-01..04
+**Spec**: [2026-09-30-query-guard-design.md](superpowers/specs/2026-09-30-query-guard-design.md)
 **Success Criteria** (what must be TRUE):
   1. `with assert_queries(max=5, no_n_plus_one=True):` fails when a block runs an N+1, with no middleware and no events written.
   2. The failure message names each offending query shape, its count, and the file and line it ran from.
