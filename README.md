@@ -75,6 +75,7 @@ Each watcher can be turned on or off under `WATCHERS`. The noisier ones are off 
 | Template | `"template"` | off | each render with name, source path, time, context key names (never values) and its place in the extends/include tree |
 | Signal | `"signal"` | off | dispatches of the signals in `SIGNAL_WATCH_LIST`: sender, receivers in call order with per-receiver time and errors |
 | Command | `"command"` | on | commands listed in `COMMAND_WATCH_LIST`: name, args, options, bounded stdout/stderr, duration, exit code — see [Tracing management commands](#tracing-management-commands) |
+| Mail | `"mail"` | off | recipients, subject, text/HTML bodies (up to 64K characters each), headers, backend, attachment filenames/types/sizes (never contents), outcome — see [Viewing sent mail](#viewing-sent-mail) |
 
 ```python
 DJANGO_INSPECTOR = {
@@ -154,6 +155,22 @@ A command not in that list runs untraced. A handful of names are **never traced 
 A traced run gets a `command.completed` anchor with its name, args, options (masked, `stdout`/`stderr`/`_`-prefixed keys dropped), the first 8192 characters of stdout and stderr (masked — the command's real streams still get everything), duration and exit code (`0` on success; `CommandError`'s `returncode`; `SystemExit`'s code, with `None` or `0` meaning success; `130` for `KeyboardInterrupt`; `1` for anything else), plus its SQL, log and exception events, exactly like a request. A command run inside an active trace (another `trace()`, a request, or another traced command) joins it instead of starting its own — its `command.completed` anchor lands in the outer trace, without an early flush.
 
 **Long commands.** A traced command's buffer flushes every 500 events instead of holding everything until the end, so memory stays flat and a killed command keeps whatever it already flushed (the trace page shows it with an "incomplete trace" notice — no anchor was ever recorded). `MAX_EVENTS_PER_TRACE` still applies to a command's total event count; set it to `0` for unlimited, chunked capture on a command that legitimately produces very many events.
+
+## Viewing sent mail
+
+The mail watcher is **off by default**: email bodies routinely hold password-reset and sign-in links whose tokens no masking rule can recognise. Turn it on deliberately:
+
+```python
+DJANGO_INSPECTOR = {
+    "WATCHERS": {"mail": True},
+}
+```
+
+It patches `django.core.mail.get_connection`, so `send_mail`, `send_mass_mail`, `mail_admins`, `mail_managers` and `EmailMessage.send()` are all covered — one `mail.sent` event per message, recorded after the backend's `send_messages` returns or raises. A message sent through a backend you instantiated directly (bypassing `get_connection()`) isn't captured.
+
+What's stored: recipients and subject, the text and HTML bodies (each capped at 64K characters and masked like any other event — `SENSITIVE_KEYS` and the card/JWT scan both apply), headers (masked by key), the backend and message class, and each attachment's filename, MIME type and size — **never its contents**. The outcome is `"sent"`, `"failed"` (the backend reported fewer messages sent than you gave it — used with `fail_silently`) or `"error"` (the backend raised; your exception is always re-raised unchanged).
+
+The Mail page (`/mail/`) lists sent messages with to/subject/status filters and CSV export. Its detail page shows the message as it would arrive: a **Text** tab, a **Headers** tab, and an **HTML** tab that embeds the stored body in a sandboxed, same-origin `<iframe>` (no `allow-scripts`, no `allow-same-origin`) pointed at a dedicated preview endpoint with its own locked-down `Content-Security-Policy` (`default-src 'none'; sandbox; frame-ancestors 'self'`) — the HTML is never rendered inline in the dashboard's own page, since it's attacker-influenced content. **Download .eml** rebuilds the message from its stored fields (no connection, nothing is sent) as a downloadable `message/rfc822` file; since attachment contents were never stored, they're listed in an `X-Inspector-Omitted-Attachments` header instead of included.
 
 ## Catching N+1 queries in tests
 
@@ -287,7 +304,7 @@ The dashboard has these pages:
 - **Live Feed**
 - **Requests**: each request has a timeline, tabs and a waterfall view of everything in its trace.
 - **Traces**: `trace()` runs and traced commands — name, status, duration — each with a timeline and waterfall on its own `/trace/<id>/` page (a command's page also shows its exit code, args, options and captured output), filterable by type. A request's trace id also resolves there and redirects to its request page.
-- **Queries**, **Cache**, **Templates**, **Logs**, **Signals** and **Exceptions**: each page has filters and an "Export CSV" link — see [CSV export](#csv-export) below.
+- **Queries**, **Cache**, **Templates**, **Mail**, **Logs**, **Signals** and **Exceptions**: each page has filters and an "Export CSV" link — see [CSV export](#csv-export) below. Mail's detail page also has an HTML preview and a "Download .eml" button — see [Viewing sent mail](#viewing-sent-mail) above.
 
 ### Pinning a trace
 

@@ -131,9 +131,9 @@ From the product discovery in `docs/discovery/2026-09-30-next-features.md`. Phas
 
 ### Email Watcher (PRD §11.9) — Phase 13
 
-- [ ] **MAIL-01**: Capture recipients, subject, HTML/text body, backend, attachments
-- [ ] **MAIL-02**: `.eml` export
-- [ ] **MAIL-03**: The dashboard previews an email's HTML body without running its scripts or loading remote content
+- [x] **MAIL-01**: Capture recipients, subject, HTML/text body, backend, attachments
+- [x] **MAIL-02**: `.eml` export
+- [x] **MAIL-03**: The dashboard previews an email's HTML body without running its scripts or loading remote content
 
 ### HTTP Client Watcher (PRD §11.14) — Phase 14
 
@@ -217,7 +217,7 @@ Update the status when a spec for that phase ships. Specs and plans in `docs/sup
 | CMD-01..03 | Phase 10 (Management Command Watcher) | Done |
 | TEST-01..04 | Phase 11 (Query Guard for Tests) | Done |
 | DASH-03, DASH-04 | Phase 12 (Issues Page & CSV Export) | Done |
-| MAIL-01..03 | Phase 13 (Email Watcher) | Planned |
+| MAIL-01..03 | Phase 13 (Email Watcher) | Done |
 | HTTP-01..03 | Phase 14 (HTTP Client Watcher) | Planned |
 | CELERY-01..05 | Phase 15 (Celery Watcher) | Planned |
 

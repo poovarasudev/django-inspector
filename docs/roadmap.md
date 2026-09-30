@@ -260,8 +260,8 @@ Work items:
   3. Bodies are masked before they are stored.
 
 Work items:
-- [ ] Email watcher
-- [ ] Mail dashboard page, preview and `.eml` export
+- [x] Email watcher
+- [x] Mail dashboard page, preview and `.eml` export
 
 ---
 
@@ -314,7 +314,7 @@ Work items:
 | 10. Management Command Watcher | v1.2 | 1/1 | Complete | 2026-09-30 |
 | 11. Query Guard for Tests | v1.2 | 1/1 | Complete | 2026-09-30 |
 | 12. Issues Page & CSV Export | v1.2 | 1/1 | Complete | 2026-09-30 |
-| 13. Email Watcher | v1.2 | 0/1 | Planned | - |
+| 13. Email Watcher | v1.2 | 1/1 | Complete | 2026-09-30 |
 | 14. HTTP Client Watcher | v1.3 | 0/1 | Planned | - |
 | 15. Celery Watcher | v1.3 | 0/1 | Planned | - |
 
