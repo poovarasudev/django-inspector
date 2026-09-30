@@ -94,6 +94,18 @@ def events_by_trace():
     return traces
 
 
+def describe_traces(traces):
+    """One line per trace: its request path and event types, for failure messages."""
+    lines = []
+    for trace_id, events in traces.items():
+        paths = [e.metadata.get("path") for e in events if e.event_type == "request.completed"]
+        logs = [e.metadata.get("message") for e in events if e.event_type == "log.record"]
+        lines.append("%s %s %s logs=%s" % (
+            trace_id[:8], paths, sorted(e.event_type for e in events), logs,
+        ))
+    return "\n".join(lines)
+
+
 def assert_trace_is_self_contained(events):
     """Every event in the trace belongs to the one order its request handled."""
     [request] = [e for e in events if e.event_type == "request.completed"]
@@ -161,9 +173,13 @@ class TestEndToEnd(TestCase):
         )
         assert [r.status_code for r in responses] == [200] * 5
         traces = await sync_to_async(events_by_trace)()
-        assert len(traces) == 5
+        summary = describe_traces(traces)
+        assert len(traces) == 5, summary
         for events in traces.values():
-            assert_trace_is_self_contained(events)
+            try:
+                assert_trace_is_self_contained(events)
+            except AssertionError as exc:
+                raise AssertionError("%s\n\nall traces:\n%s" % (exc, summary)) from None
 
     def test_wsgi_request_records_the_same_events(self):
         response = self.client.get("/sync/checkout/7/")
