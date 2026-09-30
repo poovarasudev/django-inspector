@@ -4,11 +4,13 @@ from functools import lru_cache
 
 from django.conf import settings
 from django.core.paginator import Paginator
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.functional import cached_property
+from django.views.decorators.csrf import csrf_protect
+from django.views.decorators.http import require_POST
 
 from django_inspector.conf import inspector_settings
 from django_inspector.storage.models import Event
@@ -96,7 +98,7 @@ def requests_list(request):
     trace = _normalize_trace_id(request.GET.get("trace"))
 
     if method:
-        qs = qs.filter(metadata__method=method)
+        qs = qs.filter(method=method)
     if status:
         status_map = {
             "2xx": (200, 300),
@@ -106,9 +108,9 @@ def requests_list(request):
         }
         if status in status_map:
             low, high = status_map[status]
-            qs = qs.filter(metadata__status_code__gte=low, metadata__status_code__lt=high)
+            qs = qs.filter(status_code__gte=low, status_code__lt=high)
     if path:
-        qs = qs.filter(metadata__path__icontains=path)
+        qs = qs.filter(path__icontains=path)
     if trace:
         qs = qs.filter(trace_id=trace)
     qs = _filter_dates(request, qs)
@@ -197,6 +199,25 @@ def trace_detail(request, trace_id):
     if event is None:
         raise Http404("No request with that trace id.")
     return redirect("inspector:request-detail", pk=event.pk)
+
+
+@csrf_protect
+@require_POST
+def trace_pin(request, trace_id):
+    """
+    Pin or unpin every event of a trace, keeping it out of RETENTION_HOURS
+    pruning and inspector_cleanup. csrf_protect applies the check itself, so
+    it holds even when the host project doesn't run CsrfViewMiddleware.
+    """
+    value = request.POST.get("pinned")
+    if value not in ("1", "0"):
+        return HttpResponseBadRequest("pinned must be 1 or 0")
+    pinned = value == "1"
+    trace_id = _normalize_trace_id(trace_id)
+    updated = Event.objects.filter(trace_id=trace_id).update(pinned=pinned)
+    if not updated:
+        raise Http404("No events for that trace id.")
+    return render(request, "inspector/_pin_button.html", {"trace_id": trace_id, "pinned": pinned})
 
 
 def request_export(request, pk):

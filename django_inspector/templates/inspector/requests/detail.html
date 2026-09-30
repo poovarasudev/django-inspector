@@ -12,8 +12,13 @@
         {% endwith %}
         <span style="font-size: 14px; font-weight: 400; color: var(--ins-text-secondary); margin-left: 8px;">{{ event.metadata.latency_ms }}ms</span>
     </h1>
-    <a class="inspector-btn" href="{% url 'inspector:request-export' event.pk %}" download>Export JSON</a>
+    <div style="display: flex; align-items: center; gap: 8px;">
+        <span id="inspector-pin">{% include "inspector/_pin_button.html" with trace_id=event.trace_id pinned=event.pinned %}</span>
+        <a class="inspector-btn" href="{% url 'inspector:request-export' event.pk %}" download>Export JSON</a>
+    </div>
 </div>
+
+<p style="font-size: 13px; color: var(--ins-text-secondary); margin-bottom: 12px;">Trace <code class="inspector-code-inline">{{ event.trace_id }}</code></p>
 
 {% if trace_truncated %}
 <p class="inspector-notice">Showing the first {{ max_detail_events }} events of this trace; the counts below cover those only. Use Export JSON for the full trace.</p>

@@ -13,11 +13,20 @@ from django_inspector.storage.models import Event
 TRACE = "b" * 32
 
 
+def _always_allowed(request):
+    return True
+
+
 def request_event(trace=TRACE, when=None, **metadata):
     data = {"method": "GET", "path": "/x/", "status_code": 200, "latency_ms": 5}
     data.update(metadata)
+    # Mirrors what flush_events() derives at write time: the real columns,
+    # not just the metadata dict, since requests-list filters (SCHEMA-06)
+    # and pinning act on the columns.
     return Event.objects.create(
         trace_id=trace, event_type="request.completed", metadata=data,
+        method=data.get("method"), path=data.get("path"), status_code=data.get("status_code"),
+        duration_ms=data.get("latency_ms"),
         timestamp=when or timezone.now(),
     )
 
@@ -27,6 +36,16 @@ class DashboardClient(TestCase):
         path = reverse("inspector:" + url_name, args=args)
         request = RequestFactory().get(path, params or {})
         request.user = user or User(username="staff", is_staff=True, is_active=True)
+        match = resolve(path)
+        return match.func(request, *match.args, **match.kwargs)
+
+    def post(self, url_name, *args, data=None, user=None):
+        path = reverse("inspector:" + url_name, args=args)
+        request = RequestFactory().post(path, data or {})
+        request.user = user or User(username="staff", is_staff=True, is_active=True)
+        # Mirrors django.test.Client's default (enforce_csrf_checks=False):
+        # CSRF enforcement itself is covered by a dedicated test below.
+        request._dont_enforce_csrf_checks = True
         match = resolve(path)
         return match.func(request, *match.args, **match.kwargs)
 
@@ -196,3 +215,149 @@ class TestAssetsAndCsp(DashboardClient):
         response = self.get("live-feed", user=AnonymousUser())
         assert response.status_code == 403
         assert "Content-Security-Policy" in response
+
+
+class TestRequestsListColumnFilters(DashboardClient):
+    """SCHEMA-06: method/status/path filters run against the real columns."""
+
+    def setUp(self):
+        request_event(trace="1" * 32, method="GET", path="/get-only/", status_code=200)
+        request_event(trace="2" * 32, method="POST", path="/post-only/", status_code=404)
+        request_event(trace="3" * 32, method="GET", path="/other/", status_code=500)
+
+    def test_method_filter_returns_the_right_rows(self):
+        body = self.body("requests-list", params={"method": "POST"})
+        assert "/post-only/" in body
+        assert "/get-only/" not in body
+        assert "/other/" not in body
+
+    def test_status_class_filter_returns_the_right_rows(self):
+        body = self.body("requests-list", params={"status": "5xx"})
+        assert "/other/" in body
+        assert "/get-only/" not in body
+        assert "/post-only/" not in body
+
+    def test_path_filter_returns_the_right_rows(self):
+        body = self.body("requests-list", params={"path": "post"})
+        assert "/post-only/" in body
+        assert "/get-only/" not in body
+        assert "/other/" not in body
+
+    def test_method_filter_uses_no_json_operator(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection):
+            self.get("requests-list", params={"method": "GET"})
+        sql = " ".join(q["sql"] for q in connection.queries).lower()
+        assert "json_extract" not in sql
+        assert "->>" not in sql
+
+    def test_status_filter_uses_no_json_operator(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection):
+            self.get("requests-list", params={"status": "4xx"})
+        sql = " ".join(q["sql"] for q in connection.queries).lower()
+        assert "json_extract" not in sql
+        assert "->>" not in sql
+
+    def test_path_filter_uses_no_json_operator(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection):
+            self.get("requests-list", params={"path": "other"})
+        sql = " ".join(q["sql"] for q in connection.queries).lower()
+        assert "json_extract" not in sql
+        assert "->>" not in sql
+
+
+class TestPinning(DashboardClient):
+    def setUp(self):
+        self.event = request_event()
+        Event.objects.create(trace_id=TRACE, event_type="sql.query", metadata={"sql": "SELECT 1"})
+
+    def test_pin_updates_every_row_of_the_trace(self):
+        response = self.post("trace-pin", TRACE, data={"pinned": "1"})
+        assert response.status_code == 200
+        assert list(Event.objects.filter(trace_id=TRACE).values_list("pinned", flat=True)) == [True, True]
+
+    def test_unpin_updates_every_row_of_the_trace(self):
+        Event.objects.filter(trace_id=TRACE).update(pinned=True)
+        response = self.post("trace-pin", TRACE, data={"pinned": "0"})
+        assert response.status_code == 200
+        assert not Event.objects.filter(trace_id=TRACE, pinned=True).exists()
+
+    def test_returns_the_pin_button_partial(self):
+        response = self.post("trace-pin", TRACE, data={"pinned": "1"})
+        assert "Unpin trace" in response.content.decode()
+
+    def test_non_staff_gets_403(self):
+        response = self.post("trace-pin", TRACE, data={"pinned": "1"}, user=AnonymousUser())
+        assert response.status_code == 403
+        assert not Event.objects.filter(trace_id=TRACE, pinned=True).exists()
+
+    def test_unknown_trace_is_404(self):
+        from django.http import Http404
+
+        try:
+            self.post("trace-pin", "f" * 32, data={"pinned": "1"})
+        except Http404:
+            return
+        raise AssertionError("expected Http404")
+
+    def test_empty_trace_is_404(self):
+        from django.http import Http404
+
+        try:
+            self.post("trace-pin", "0" * 32, data={"pinned": "1"})
+        except Http404:
+            return
+        raise AssertionError("expected Http404")
+
+    def test_bad_pinned_value_is_400(self):
+        response = self.post("trace-pin", TRACE, data={"pinned": "maybe"})
+        assert response.status_code == 400
+
+    def test_missing_pinned_value_is_400(self):
+        response = self.post("trace-pin", TRACE, data={})
+        assert response.status_code == 400
+
+    def test_get_is_405(self):
+        response = self.get("trace-pin", TRACE)
+        assert response.status_code == 405
+
+    @override_settings(
+        DJANGO_INSPECTOR={"INSPECTOR_DASHBOARD_PERMISSION": "tests.test_dashboard_features._always_allowed"}
+    )
+    def test_csrf_is_enforced_even_without_csrfviewmiddleware(self):
+        from django.test import Client
+
+        # Test settings' MIDDLEWARE has no CsrfViewMiddleware (just
+        # InspectorMiddleware): csrf_protect on the view is the only thing
+        # that can reject this, proving it works standalone. The permission
+        # override stands in for staff auth so no session backend is needed.
+        c = Client(enforce_csrf_checks=True)
+        response = c.post(reverse("inspector:trace-pin", args=[TRACE]), {"pinned": "1"})
+        assert response.status_code == 403
+        assert not Event.objects.filter(trace_id=TRACE, pinned=True).exists()
+
+    def test_pinned_badge_and_button_show_on_the_detail_page(self):
+        body = self.body("request-detail", self.event.pk)
+        assert "Pin trace" in body
+        assert "inspector-badge--pinned" not in body
+
+        Event.objects.filter(trace_id=TRACE).update(pinned=True)
+        body = self.body("request-detail", self.event.pk)
+        assert "Unpin trace" in body
+        assert "inspector-badge--pinned" in body
+
+    def test_pinned_badge_shows_in_the_requests_list(self):
+        body = self.body("requests-list")
+        assert "inspector-badge--pinned" not in body
+
+        Event.objects.filter(trace_id=TRACE).update(pinned=True)
+        body = self.body("requests-list")
+        assert "inspector-badge--pinned" in body

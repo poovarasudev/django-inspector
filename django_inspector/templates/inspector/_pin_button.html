@@ -1,0 +1,9 @@
+{% if pinned %}<span class="inspector-badge inspector-badge--pinned">Pinned</span>{% endif %}
+<button type="button" class="inspector-btn"
+        hx-post="{% url 'inspector:trace-pin' trace_id %}"
+        hx-vals='{"pinned": "{% if pinned %}0{% else %}1{% endif %}"}'
+        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+        hx-target="#inspector-pin"
+        hx-swap="innerHTML">
+    {% if pinned %}Unpin trace{% else %}Pin trace{% endif %}
+</button>

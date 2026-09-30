@@ -11,6 +11,7 @@ urlpatterns = [
     path("requests/<int:pk>/", inspector_required(views.request_detail), name="request-detail"),
     path("requests/<int:pk>/export.json", inspector_required(views.request_export), name="request-export"),
     path("trace/<str:trace_id>/", inspector_required(views.trace_detail), name="trace-detail"),
+    path("trace/<str:trace_id>/pin/", inspector_required(views.trace_pin), name="trace-pin"),
     path("assets/<str:name>", inspector_required(views.asset), name="asset"),
     path("queries/", inspector_required(views.queries_list), name="queries-list"),
     path("queries/<int:pk>/", inspector_required(views.query_detail), name="query-detail"),

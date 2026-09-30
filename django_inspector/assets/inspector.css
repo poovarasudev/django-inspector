@@ -192,6 +192,7 @@ body {
 .inspector-badge--3xx { background: var(--ins-status-3xx); }
 .inspector-badge--4xx { background: var(--ins-status-4xx); }
 .inspector-badge--5xx { background: var(--ins-status-5xx); }
+.inspector-badge--pinned { background: var(--ins-accent); margin-left: 6px; }
 
 /* Method badge */
 .inspector-method-badge {
