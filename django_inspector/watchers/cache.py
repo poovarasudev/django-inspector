@@ -36,10 +36,15 @@ _PARAMS = {
     "add": ("key", "value", "timeout", "version"),
     "delete": ("key", "version"),
     "clear": (),
+    "get_many": ("keys", "version"),
+    "set_many": ("data", "timeout", "version"),
+    "delete_many": ("keys", "version"),
 }
 
 WRAPPED_METHODS = tuple(_PARAMS)
 CACHE_EVENT_TYPES = tuple("cache." + name for name in WRAPPED_METHODS)
+MAX_RECORDED_KEYS = 100
+_MULTI_KEY_OPERATIONS = ("get_many", "set_many", "delete_many")
 
 # True while a wrapped cache call runs in this context. Nested calls
 # (e.g. BaseCache.get_many -> get) pass straight through, so only the
@@ -58,6 +63,7 @@ class CacheWatcher(BaseWatcher):
     - CACHE-01: get — key, alias, hit/miss, duration
     - CACHE-02: set/add — key, alias, TTL, value size (never the value)
     - CACHE-03: delete/clear — key ("*" for clear), alias
+    - CACHE-04: get_many/set_many/delete_many — one event with keys and key_count
     - CACHE-05: trace correlation via BaseWatcher.record()
     - CACHE-06: installs and removes cleanly; idempotent
     - CACHE-07: off by default (conf.DEFAULTS["WATCHERS"]["cache"])
@@ -154,13 +160,19 @@ def _prepare_call(operation, args, kwargs):
     """
     Return (bound, call_args, call_kwargs): the named arguments of the call and
     the arguments to pass to the original. For get(), the caller's default is
-    swapped for _MISS so a miss is detectable.
+    swapped for _MISS so a miss is detectable. For get_many()/delete_many(), an
+    iterator of keys is materialised once so both the backend and the event
+    see every key.
     """
     bound = dict(zip(_PARAMS[operation], args))
     bound.update(kwargs)
     call_args, call_kwargs = args, kwargs
     if operation == "get":
         call_args, call_kwargs = _replace_arg(operation, call_args, call_kwargs, "default", _MISS)
+    elif operation in ("get_many", "delete_many") and "keys" in bound:
+        keys = list(bound["keys"])
+        bound["keys"] = keys
+        call_args, call_kwargs = _replace_arg(operation, call_args, call_kwargs, "keys", keys)
     return bound, call_args, call_kwargs
 
 
@@ -174,6 +186,23 @@ def _replace_arg(operation, args, kwargs, name, value):
 
 def _operation_fields(cache, operation, bound, result, succeeded):
     """Per-operation metadata. Values are never recorded — only their type and size."""
+    if operation in _MULTI_KEY_OPERATIONS:
+        if operation == "set_many":
+            keys = list(bound.get("data") or {})
+        else:
+            keys = list(bound.get("keys") or [])
+        fields = {
+            "keys": [str(k) for k in keys[:MAX_RECORDED_KEYS]],
+            "key_count": len(keys),
+        }
+        if operation == "get_many" and succeeded:
+            fields["hit_count"] = len(result)
+            fields["miss_count"] = len(keys) - len(result)
+        elif operation == "set_many":
+            fields["ttl_seconds"] = _ttl_seconds(cache, bound.get("timeout", DEFAULT_TIMEOUT))
+            if succeeded:
+                fields["failed_keys"] = [str(k) for k in (result or [])]
+        return fields
     if operation == "clear":
         return {"key": "*"}
     fields = {"key": str(bound.get("key"))}

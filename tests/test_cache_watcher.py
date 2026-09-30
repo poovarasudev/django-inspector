@@ -272,3 +272,69 @@ class TestCacheEventContext(CacheWatcherTestCase):
     def test_card_number_in_key_is_masked(self):
         caches["default"].get("card:4111111111111111")
         assert cache_events()[0]["metadata"]["key"] == "***REDACTED***"
+
+
+class TestMultiKeyOperations(CacheWatcherTestCase):
+    def test_get_many_is_one_event_with_hit_counts(self):
+        caches["default"].set("a", 1)
+        caches["default"].set("b", 2)
+        clear_buffer()
+        assert caches["default"].get_many(["a", "b", "c"]) == {"a": 1, "b": 2}
+        [event] = cache_events()  # BaseCache.get_many calls get() per key; those are not recorded
+        meta = event["metadata"]
+        assert event["event_type"] == "cache.get_many"
+        assert meta["keys"] == ["a", "b", "c"]
+        assert meta["key_count"] == 3
+        assert meta["hit_count"] == 2
+        assert meta["miss_count"] == 1
+
+    def test_get_many_accepts_a_generator(self):
+        caches["default"].set("a", 1)
+        caches["default"].set("b", 2)
+        clear_buffer()
+        assert caches["default"].get_many(k for k in ["a", "b"]) == {"a": 1, "b": 2}
+        assert cache_events()[0]["metadata"]["keys"] == ["a", "b"]
+
+    def test_set_many_is_one_event(self):
+        assert caches["default"].set_many({"a": 1, "b": 2}, timeout=60) == []
+        [event] = cache_events()
+        meta = event["metadata"]
+        assert event["event_type"] == "cache.set_many"
+        assert meta["keys"] == ["a", "b"]
+        assert meta["key_count"] == 2
+        assert meta["ttl_seconds"] == 60
+        assert meta["failed_keys"] == []
+
+    def test_delete_many_accepts_a_generator(self):
+        caches["default"].set_many({"a": 1, "b": 2})
+        clear_buffer()
+        caches["default"].delete_many(k for k in ["a", "b"])
+        [event] = cache_events()
+        assert event["event_type"] == "cache.delete_many"
+        assert event["metadata"]["keys"] == ["a", "b"]
+        assert event["metadata"]["key_count"] == 2
+        assert caches["default"].get("a") is None
+
+    def test_recorded_keys_are_capped(self):
+        keys = ["k%d" % i for i in range(150)]
+        caches["default"].get_many(keys)
+        meta = cache_events()[0]["metadata"]
+        assert len(meta["keys"]) == 100
+        assert meta["key_count"] == 150
+        assert meta["miss_count"] == 150
+
+
+@override_settings(CACHES=TEST_CACHES)
+class TestMultiKeyLifecycle(TestCase):
+    def test_inherited_many_methods_are_wrapped_then_removed(self):
+        from django.core.cache.backends.base import BaseCache
+
+        assert "get_many" not in LocMemCache.__dict__
+        watcher = CacheWatcher()
+        watcher.enable()
+        try:
+            assert "get_many" in LocMemCache.__dict__
+        finally:
+            watcher.disable()
+        assert "get_many" not in LocMemCache.__dict__
+        assert LocMemCache.get_many is BaseCache.get_many
