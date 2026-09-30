@@ -27,6 +27,7 @@ logger = logging.getLogger("django_inspector")
 MAX_SQL_LENGTH = 10000   # characters of SQL text stored per query
 MAX_PARAMS = 100          # parameters stored per query
 MAX_PARAM_LENGTH = 500    # characters stored per parameter
+MAX_TRACKED_QUERIES = 10000  # distinct query shapes/exact queries tracked per trace (each, separately)
 
 
 class _QueryStats:
@@ -43,12 +44,30 @@ class _QueryStats:
         self.exact: Counter[int] = Counter()    # hash of (SQL, params) -> count
 
     def add(self, sql, params) -> Tuple[int, int]:
-        """Count one query; return (similar count, exact duplicate count)."""
+        """
+        Count one query; return (similar count, exact duplicate count).
+
+        A trace running very many distinct queries (or a management command
+        processing a huge batch) must keep memory flat: once MAX_TRACKED_QUERIES
+        distinct shapes (or exact queries) are tracked, a further new one isn't
+        added — it's reported as a single occurrence, so it never raises a false
+        N+1 or duplicate flag. Counts for shapes already tracked keep growing.
+        """
         normalized = _normalize_sql(sql)
-        self.similar[normalized] += 1
+        if normalized in self.similar or len(self.similar) < MAX_TRACKED_QUERIES:
+            self.similar[normalized] += 1
+            similar_count = self.similar[normalized]
+        else:
+            similar_count = 1
+
         key = hash((sql, _params_key(params)))
-        self.exact[key] += 1
-        return self.similar[normalized], self.exact[key]
+        if key in self.exact or len(self.exact) < MAX_TRACKED_QUERIES:
+            self.exact[key] += 1
+            exact_count = self.exact[key]
+        else:
+            exact_count = 1
+
+        return similar_count, exact_count
 
     def clear(self):
         self.similar.clear()

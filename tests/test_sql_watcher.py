@@ -10,6 +10,7 @@ from django_inspector.watchers.sql import (
     MAX_PARAM_LENGTH,
     MAX_PARAMS,
     MAX_SQL_LENGTH,
+    MAX_TRACKED_QUERIES,
     SQLWatcher,
     _is_inspector_query,
     _normalize_sql,
@@ -163,6 +164,48 @@ class TestDuplicateDetection:
         stats.clear()
         assert len(stats) == 0
         assert stats.add("SELECT 1", None) == (1, 1)
+
+
+class TestTrackedQueriesCap:
+    """A command running very many distinct queries must keep memory flat (CMD-03)."""
+
+    def test_stops_tracking_new_shapes_past_the_cap(self, monkeypatch):
+        import django_inspector.watchers.sql as sql_module
+
+        monkeypatch.setattr(sql_module, "MAX_TRACKED_QUERIES", 3)
+        stats = _QueryStats()
+        for i in range(5):
+            similar, _ = stats.add("SELECT * FROM t%d WHERE id = 1" % i, None)
+            if i < 3:
+                assert similar == 1
+        assert len(stats.similar) == 3
+        # The 4th and 5th shapes are untracked: no false N+1 flag.
+        similar, _ = stats.add("SELECT * FROM t3 WHERE id = 1", None)
+        assert similar == 1
+
+    def test_existing_shapes_still_grow_past_the_cap(self, monkeypatch):
+        import django_inspector.watchers.sql as sql_module
+
+        monkeypatch.setattr(sql_module, "MAX_TRACKED_QUERIES", 1)
+        stats = _QueryStats()
+        stats.add("SELECT * FROM t WHERE id = 1", None)
+        stats.add("SELECT * FROM other", None)  # untracked: cap already reached
+        similar, _ = stats.add("SELECT * FROM t WHERE id = 2", None)  # same shape as the first
+        assert similar == 2
+        assert len(stats.similar) == 1
+
+    def test_exact_duplicates_have_their_own_cap(self, monkeypatch):
+        import django_inspector.watchers.sql as sql_module
+
+        monkeypatch.setattr(sql_module, "MAX_TRACKED_QUERIES", 1)
+        stats = _QueryStats()
+        stats.add("SELECT 1", None)
+        _, exact = stats.add("SELECT 2", None)  # a different exact query: untracked
+        assert exact == 1
+        assert len(stats.exact) == 1
+
+    def test_default_cap_is_ten_thousand(self):
+        assert MAX_TRACKED_QUERIES == 10000
 
 
 class TestDetectionScalesLinearly(TestCase):
