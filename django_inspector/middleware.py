@@ -71,16 +71,21 @@ class InspectorMiddleware:
 
         self._notify_request_start(request)
 
+        # An exception escaping get_response (e.g. DEBUG_PROPAGATE_EXCEPTIONS)
+        # skips the sampling decision; the trace is kept and still flushed.
+        sampled = True
         try:
             response = self.get_response(request)
             self._notify_request_end(request, response)
             sampled = compute_sampling_decision(request, response, scope.pick)
             request.inspector_sampled = sampled
-            scope.flush(sampled)
-            self._set_trace_header(response, sampled, scope.trace_id)
         finally:
-            scope.close()
+            try:
+                scope.flush(sampled)
+            finally:
+                scope.close()
 
+        self._set_trace_header(response, sampled, scope.trace_id)
         return response
 
     async def __acall__(self, request):
@@ -101,16 +106,19 @@ class InspectorMiddleware:
 
         self._notify_request_start(request)
 
+        sampled = True  # kept when an exception escapes, as in __call__
         try:
             response = await self.get_response(request)
             await sync_to_async(self._notify_request_end)(request, response)
             sampled = compute_sampling_decision(request, response, scope.pick)
             request.inspector_sampled = sampled
-            await sync_to_async(scope.flush)(sampled)
-            self._set_trace_header(response, sampled, scope.trace_id)
         finally:
-            scope.close()
+            try:
+                await sync_to_async(scope.flush)(sampled)
+            finally:
+                scope.close()
 
+        self._set_trace_header(response, sampled, scope.trace_id)
         return response
 
     @staticmethod
