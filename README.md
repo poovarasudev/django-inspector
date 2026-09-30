@@ -74,6 +74,7 @@ Each watcher can be turned on or off under `WATCHERS`. The noisier ones are off 
 | Cache | `"cache"` | off | `get`/`set`/`add`/`delete`/`clear` and the `*_many` variants: key, alias, backend, hit/miss, TTL, value size (never the value) |
 | Template | `"template"` | off | each render with name, source path, time, context key names (never values) and its place in the extends/include tree |
 | Signal | `"signal"` | off | dispatches of the signals in `SIGNAL_WATCH_LIST`: sender, receivers in call order with per-receiver time and errors |
+| Command | `"command"` | on | commands listed in `COMMAND_WATCH_LIST`: name, args, options, bounded stdout/stderr, duration, exit code — see [Tracing management commands](#tracing-management-commands) |
 
 ```python
 DJANGO_INSPECTOR = {
@@ -138,6 +139,22 @@ A request's response can carry its trace id in a header, and every log record ca
   }
   ```
 
+## Tracing management commands
+
+`trace()` covers a script you write yourself; the command watcher covers `manage.py`/`django-admin` commands and `call_command()` for you, with no code changes to the command itself. It's opt-in and empty by default:
+
+```python
+DJANGO_INSPECTOR = {
+    "COMMAND_WATCH_LIST": ["backfill_prices", "send_digest"],
+}
+```
+
+A command not in that list runs untraced. A handful of names are **never traced even when listed** — `runserver`, `runserver_plus`, `testserver`, `test`, `shell`, `shell_plus`, `dbshell`, `migrate` and `inspector_cleanup` — since tracing them would be noisy at best and self-referential at worst; listing one anyway triggers the system check `django_inspector.W009`.
+
+A traced run gets a `command.completed` anchor with its name, args, options (masked, `stdout`/`stderr`/`_`-prefixed keys dropped), the first 8192 characters of stdout and stderr (masked — the command's real streams still get everything), duration and exit code (`0` on success; `CommandError`'s `returncode`; `SystemExit`'s code, with `None` or `0` meaning success; `130` for `KeyboardInterrupt`; `1` for anything else), plus its SQL, log and exception events, exactly like a request. A command run inside an active trace (another `trace()`, a request, or another traced command) joins it instead of starting its own — its `command.completed` anchor lands in the outer trace, without an early flush.
+
+**Long commands.** A traced command's buffer flushes every 500 events instead of holding everything until the end, so memory stays flat and a killed command keeps whatever it already flushed (the trace page shows it with an "incomplete trace" notice — no anchor was ever recorded). `MAX_EVENTS_PER_TRACE` still applies to a command's total event count; set it to `0` for unlimited, chunked capture on a command that legitimately produces very many events.
+
 ## Configuration
 
 Every setting goes in one dict, and every key is optional:
@@ -174,10 +191,11 @@ DJANGO_INSPECTOR = {
 | `LOG_LEVEL_THRESHOLD` | `"WARNING"` | Minimum level the log watcher records: a level name or number. |
 | `INSPECTOR_RAISE_ERRORS` | `False` | Re-raise the inspector's own internal errors instead of logging them. Useful in development and tests. |
 | `TRACE_HEADER` | `"debug"` | `X-Inspector-Trace` on a kept trace's response: `"debug"` sends it only when `settings.DEBUG` is on, `True` always sends it, `False` never does. |
+| `COMMAND_WATCH_LIST` | `[]` | Management command names to trace — see [Tracing management commands](#tracing-management-commands). Empty means no command is traced. |
 
 ### Configuration checks
 
-`manage.py check` (and `runserver`/`migrate`) validates the configuration: unknown keys (with a "did you mean" hint), out-of-range or wrongly typed values, invalid regexes and IP ranges, unimportable dotted paths, a missing or misplaced middleware, a `DASHBOARD_URL_PREFIX` that doesn't match where the dashboard is mounted, and a production dashboard protected by `is_staff` alone. Warnings use the ids `django_inspector.W001`–`W008` and can be silenced with `SILENCED_SYSTEM_CHECKS`.
+`manage.py check` (and `runserver`/`migrate`) validates the configuration: unknown keys (with a "did you mean" hint), out-of-range or wrongly typed values, invalid regexes and IP ranges, unimportable dotted paths, a missing or misplaced middleware, a `DASHBOARD_URL_PREFIX` that doesn't match where the dashboard is mounted, a production dashboard protected by `is_staff` alone, and a `COMMAND_WATCH_LIST` entry that's never traced. Warnings use the ids `django_inspector.W001`–`W009` and can be silenced with `SILENCED_SYSTEM_CHECKS`.
 
 ## Dashboard access
 
@@ -199,7 +217,7 @@ When both are set, the request must pass both. When `DEBUG = False` and neither 
 The dashboard has these pages:
 - **Live Feed**
 - **Requests**: each request has a timeline, tabs and a waterfall view of everything in its trace.
-- **Traces**: `trace()` runs that aren't requests — name, status, duration — each with a timeline and waterfall on its own `/trace/<id>/` page. A request's trace id also resolves there and redirects to its request page.
+- **Traces**: `trace()` runs and traced commands — name, status, duration — each with a timeline and waterfall on its own `/trace/<id>/` page (a command's page also shows its exit code, args, options and captured output), filterable by type. A request's trace id also resolves there and redirects to its request page.
 - **Queries**, **Cache**, **Templates**, **Logs**, **Signals** and **Exceptions**: each page has filters.
 
 ### Pinning a trace

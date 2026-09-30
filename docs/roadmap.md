@@ -207,9 +207,9 @@ Work items:
   4. Command traces appear on the Traces page and render on `/trace/<id>/`.
 
 Work items:
-- [ ] Command watcher (hook, allowlist, denylist)
-- [ ] Chunked flush and bounded query stats
-- [ ] Command traces on the Traces page
+- [x] Command watcher (hook, allowlist, denylist)
+- [x] Chunked flush and bounded query stats
+- [x] Command traces on the Traces page
 
 ---
 
@@ -308,7 +308,7 @@ Work items:
 | 7. ASGI Verification & Release Prep | v1.1 | 1/1 | Complete | 2026-09-30 |
 | 8. Event Schema v2 | v1.2 | 1/1 | Complete | 2026-09-30 |
 | 9. Trace API | v1.2 | 1/1 | Complete | 2026-09-30 |
-| 10. Management Command Watcher | v1.2 | 0/1 | Planned | - |
+| 10. Management Command Watcher | v1.2 | 1/1 | Complete | 2026-09-30 |
 | 11. Query Guard for Tests | v1.2 | 0/1 | Planned | - |
 | 12. Issues Page & CSV Export | v1.2 | 0/1 | Planned | - |
 | 13. Email Watcher | v1.2 | 0/1 | Planned | - |
