@@ -135,7 +135,7 @@ Work items:
 Work items:
 - [x] ASGI end-to-end test app + async coverage for v1.1 watchers (and natively async-capable middleware)
 - [x] Release hygiene — README, CHANGELOG, license reconciled to MIT, version 0.2.0, build smoke test
-- [x] Fixed release blockers found on the way: Python 3.8/3.9 import crash; templates missing from the wheel
+- [x] Fixed release blockers found on the way: Python 3.8/3.9 import crash; templates missing from the wheel; events lost under concurrent ASGI requests (per-request buffers)
 - [x] CI — GitHub Actions test matrix (Python 3.8–3.13 × Django 4.2/5.2) + distribution check
 
 ---

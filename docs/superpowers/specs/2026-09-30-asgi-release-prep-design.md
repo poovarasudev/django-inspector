@@ -14,6 +14,8 @@ Prove that every v1.1 watcher works end to end under ASGI, and make the package 
 2. **The built wheel ships no templates.** `uv build` produces a wheel with 0 `.html` files, so a pip-installed dashboard raises `TemplateDoesNotExist` on every page. The tests don't catch it because they run from the source tree.
 3. **`InspectorMiddleware` is sync-only.** Under ASGI, Django adapts it with a thread hop on every request. The end-of-request flush writes to the database, and the request watcher can evaluate the lazy `request.user`; both must stay in a sync context.
 
+4. **Found during implementation (CI): events could be lost under concurrent ASGI requests.** The event buffer and SQL query log were `ContextVar`-backed but created lazily. Request tasks that inherited a buffer from their parent context shared one list, so one request's flush (copy, write, clear, in a worker thread) could wipe another request's freshly appended event. The fix: the middleware gives every request fresh buffers at the start and resets them at the end. `tests/test_asgi.py` has a deterministic regression test.
+
 ## Decisions
 
 | Decision | Choice |
