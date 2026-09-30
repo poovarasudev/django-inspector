@@ -1,7 +1,7 @@
 """Tests for the Exception Watcher (EXC-01..EXC-04)."""
 
 import pytest
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from django_inspector.watchers.exception import (
     ExceptionWatcher,
@@ -183,3 +183,97 @@ class TestExtractChain:
             chain = _extract_chain(e)
         assert len(chain) == 1
         assert chain[0]["chain_type"] == "context"
+
+
+class TestLocalsAreSafe(TestCase):
+    """S4: locals are masked before repr, honour @sensitive_variables, and never hit the DB."""
+
+    def setUp(self):
+        from django.core.signals import got_request_exception
+
+        got_request_exception.receivers.clear()
+        self.watcher = ExceptionWatcher()
+        self.watcher.enable()
+        self.token = set_trace_id(generate_trace_id())
+        clear_buffer()
+
+    def tearDown(self):
+        self.watcher.disable()
+        clear_trace_id(self.token)
+        clear_buffer()
+
+    def _raise_in(self, func, *args):
+        from django.core.signals import got_request_exception
+
+        try:
+            func(*args)
+        except Exception:
+            got_request_exception.send(sender=self.__class__, request=None)
+        meta = [e for e in _get_buffer() if e["event_type"] == "exception.raised"][0]["metadata"]
+        return meta
+
+    @staticmethod
+    def _frame(meta, name):
+        return [f for f in meta["frames"] if f["function"] == name][0]
+
+    def test_secrets_nested_in_a_dict_local_are_masked(self):
+        def login():
+            payload = {"user": "u", "password": "hunter2"}  # noqa: F841
+            raise ValueError("boom")
+
+        meta = self._raise_in(login)
+        assert "hunter2" not in self._frame(meta, "login")["locals"]["payload"]
+        assert "***REDACTED***" in self._frame(meta, "login")["locals"]["payload"]
+
+    @override_settings(DEBUG=True)
+    def test_sensitive_variables_are_honoured_even_in_debug(self):
+        from django.views.decorators.debug import sensitive_variables
+
+        @sensitive_variables("card")
+        def pay():
+            card = "not-a-real-card-number"  # noqa: F841
+            amount = 5  # noqa: F841
+            raise ValueError("boom")
+
+        frame = self._frame(self._raise_in(pay), "pay")
+        assert "not-a-real-card-number" not in frame["locals"]["card"]
+        assert frame["locals"]["amount"] == "5"
+
+    @pytest.mark.django_db
+    def test_unevaluated_querysets_are_not_evaluated(self):
+        from django.contrib.auth.models import User
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        def view():
+            users = User.objects.filter(is_staff=True)  # noqa: F841
+            raise ValueError("boom")
+
+        with CaptureQueriesContext(connection) as queries:
+            meta = self._raise_in(view)
+        assert len(queries) == 0
+        assert self._frame(meta, "view")["locals"]["users"] == "<unevaluated QuerySet: auth.User>"
+
+    def test_deep_recursion_keeps_only_the_innermost_frames(self):
+        from django_inspector.watchers.exception import MAX_FRAMES
+
+        def recurse(n):
+            if n == 0:
+                raise RecursionError("deep")
+            recurse(n - 1)
+
+        meta = self._raise_in(recurse, MAX_FRAMES + 30)
+        assert len(meta["frames"]) == MAX_FRAMES
+        assert meta["frames_omitted"] > 0
+        assert meta["frames"][-1]["function"] == "recurse"
+        assert len(meta["stack_trace"]) <= MAX_FRAMES + 2
+
+    def test_namedtuple_fields_are_masked(self):
+        from collections import namedtuple
+
+        creds = namedtuple("Creds", "user password")("u", "hunter2")
+        assert "hunter2" not in _safe_locals({"creds": creds})["creds"]
+
+    def test_large_containers_are_bounded(self):
+        result = _safe_locals({"big": {str(i): i for i in range(100000)}})
+        assert len(result["big"]) <= 203
