@@ -33,10 +33,10 @@ class TraceScope:
         self.trace_id = trace_id
         self.pick = pick
         self.started = time.monotonic()
-        self._trace_token = None
-        self._buffer_token = None
-        self._query_log_token = None
-        self._detail_token = None
+        self._trace_token: Optional[object] = None
+        self._buffer_token: Optional[object] = None
+        self._query_log_token: Optional[object] = None
+        self._detail_token: Optional[object] = None
 
     @classmethod
     def start(cls, trace_id: Optional[str] = None) -> "TraceScope":
