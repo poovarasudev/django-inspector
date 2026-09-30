@@ -7,7 +7,7 @@ Requirements: MASK-01..06
 import pytest
 from django.test import override_settings
 
-from django_inspector.masking import mask_metadata, _REDACTED, _REDACTED_DEEP
+from django_inspector.masking import _REDACTED, _REDACTED_DEEP, mask_metadata
 from django_inspector.storage.flush import _get_buffer, clear_buffer
 from django_inspector.tracing.context import clear_trace_id, generate_trace_id, set_trace_id
 from django_inspector.watchers.base import BaseWatcher

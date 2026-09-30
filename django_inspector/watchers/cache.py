@@ -151,7 +151,7 @@ def _make_wrapper(watcher, operation, original):
             return bound.get("default")
         return result
 
-    wrapper._inspector_wrapped = True
+    wrapper._inspector_wrapped = True  # type: ignore[attr-defined]
     return wrapper
 
 

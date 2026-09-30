@@ -129,6 +129,7 @@ class TestProductionAccessCheck:
         assert checks.check_production_access() == []
 
 
+@pytest.mark.django_db
 class TestChecksAreRegistered:
     def test_run_checks_includes_inspector_checks(self):
         from django.core.checks import run_checks

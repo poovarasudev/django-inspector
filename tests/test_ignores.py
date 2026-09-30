@@ -150,6 +150,7 @@ class TestDashboardPathsAreNotTraced(TestCase):
 
     def _run(self, path):
         from django.db import connection
+
         from django_inspector.middleware import InspectorMiddleware
 
         request = RequestFactory().get(path)

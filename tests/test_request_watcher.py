@@ -3,16 +3,16 @@
 import json
 
 import pytest
-from django.test import RequestFactory, TestCase, override_settings
 from django.http import HttpResponse
+from django.test import RequestFactory, TestCase, override_settings
 
+from django_inspector.storage.flush import _get_buffer, clear_buffer
+from django_inspector.tracing.context import clear_trace_id, generate_trace_id, set_trace_id
 from django_inspector.watchers.request import (
     RequestWatcher,
     _extract_headers,
     _get_user_info,
 )
-from django_inspector.tracing.context import set_trace_id, clear_trace_id, generate_trace_id
-from django_inspector.storage.flush import _get_buffer, clear_buffer
 
 
 @pytest.fixture(autouse=True)

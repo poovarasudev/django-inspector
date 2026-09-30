@@ -5,10 +5,11 @@ local variables, and chained exception chains.
 Requirements: EXC-01..EXC-04
 """
 
-import sys
 import logging
+import sys
 import traceback
 from itertools import islice
+from typing import List
 
 from django.core.signals import got_request_exception
 from django.views.debug import SafeExceptionReporterFilter
@@ -169,7 +170,7 @@ def _extract_chain(exc: BaseException) -> list:
     Extract chained exceptions — __cause__ (explicit chaining via `raise ... from`)
     and __context__ (implicit chaining) — EXC-03.
     """
-    chain = []
+    chain: List[dict] = []
     seen = set()
     current = exc
 

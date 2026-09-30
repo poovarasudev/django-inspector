@@ -1,6 +1,6 @@
 import pytest
 
-from django_inspector.storage.flush import buffer_event, clear_buffer, flush_events, _get_buffer
+from django_inspector.storage.flush import _get_buffer, buffer_event, clear_buffer, flush_events
 from django_inspector.storage.models import Event
 
 

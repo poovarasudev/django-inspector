@@ -17,6 +17,18 @@ DATABASES = {
         "NAME": ":memory:",
     }
 }
+# INSPECTOR_TEST_DB=postgres runs the suite on PostgreSQL (JSONField lookups
+# behave differently per backend). CI provides the server; see ci.yml.
+if os.environ.get("INSPECTOR_TEST_DB") == "postgres":
+    DATABASES["default"] = {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("PGDATABASE", "inspector_test"),
+        "USER": os.environ.get("PGUSER", "postgres"),
+        "PASSWORD": os.environ.get("PGPASSWORD", ""),
+        "HOST": os.environ.get("PGHOST", "localhost"),
+        "PORT": os.environ.get("PGPORT", "5432"),
+    }
+USE_TZ = True
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 DJANGO_INSPECTOR = {
     "INSPECTOR_ENABLED": True,

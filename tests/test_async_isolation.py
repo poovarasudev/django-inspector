@@ -6,11 +6,10 @@ Requirements: ASYNC-01, ASYNC-02
 
 import asyncio
 
-import pytest
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
-from django_inspector.storage.flush import _buffer_var, buffer_event, clear_buffer
-from django_inspector.watchers.sql import _query_log_var, _get_query_log, clear_query_log
+from django_inspector.storage.flush import _buffer_var, clear_buffer
+from django_inspector.watchers.sql import _get_query_log, _query_log_var, clear_query_log
 
 
 class TestFlushContextVarIsolation(TestCase):

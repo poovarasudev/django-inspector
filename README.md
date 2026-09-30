@@ -15,7 +15,7 @@ django-inspector records what happens during each request: the request itself, S
 ## Requirements
 
 - Python 3.8+
-- Django 4.2 or 5.x. Tested on 4.2 (Python 3.8–3.12) and 5.2 (Python 3.10–3.13). Django 4.0/4.1 are expected to work but aren't tested.
+- Django 4.2, 5.x or 6.x. Tested on 4.2 (Python 3.8–3.12), 5.2 (Python 3.10–3.14), and 6.0 and 6.1 (Python 3.12–3.14), on SQLite and PostgreSQL. Django 4.0/4.1 are expected to work but aren't tested.
 
 ## Installation
 
@@ -172,6 +172,10 @@ The dashboard has these pages:
 ```bash
 uv run --extra dev python -m pytest          # the test suite
 uv build && python scripts/check_dist.py dist/   # build and check the wheel/sdist contents
+uv run --extra dev ruff check django_inspector tests scripts
+uv run --extra dev mypy
+uv run --extra dev python scripts/benchmark.py  # per-request overhead, inspector on vs off
+INSPECTOR_TEST_DB=postgres uv run --extra dev --with 'psycopg[binary]' python -m pytest   # on PostgreSQL (PG* env vars)
 ```
 
 Planning docs live in `docs/`: the roadmap, requirements, and a spec and plan per feature under `docs/superpowers/`.

@@ -49,6 +49,7 @@ def _compiled_exception_classes():
     import are logged and skipped.
     """
     from django.utils.module_loading import import_string
+
     from django_inspector.conf import inspector_settings
 
     dotted_names = inspector_settings.IGNORE_EXCEPTIONS or []

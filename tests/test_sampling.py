@@ -129,6 +129,7 @@ class TestSamplingIntegration(TestCase):
         """Run a request through InspectorMiddleware with a stub view."""
         from django.http import HttpResponse
         from django.test import RequestFactory
+
         from django_inspector.middleware import InspectorMiddleware
 
         factory = RequestFactory()

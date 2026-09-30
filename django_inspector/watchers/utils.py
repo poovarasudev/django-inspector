@@ -4,6 +4,8 @@ import os
 import sys
 import sysconfig
 import time
+from types import FrameType
+from typing import Dict, Optional
 
 import django
 
@@ -34,7 +36,7 @@ _LIBRARY_PREFIXES = tuple(
     }
 )
 _LIBRARY_SEGMENTS = ("/site-packages/", "/dist-packages/")
-_library_file_cache = {}
+_library_file_cache: Dict[str, bool] = {}
 
 
 def _is_library_file(filename: str) -> bool:
@@ -61,7 +63,7 @@ def extract_origin() -> dict:
     and installed packages. Walks frame objects directly, which is far cheaper
     than traceback.extract_stack() (that reads source lines for every frame).
     """
-    frame = sys._getframe(1)
+    frame: Optional[FrameType] = sys._getframe(1)
     while frame is not None:
         code = frame.f_code
         if not _is_library_file(code.co_filename):

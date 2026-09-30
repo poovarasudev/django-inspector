@@ -1,22 +1,22 @@
 """Tests for the SQL Watcher (SQL-01..SQL-07)."""
 
 import pytest
-from django.test import TestCase, override_settings
 from django.db import connection
+from django.test import TestCase, override_settings
 
+from django_inspector.storage.flush import _get_buffer, clear_buffer
+from django_inspector.tracing.context import clear_trace_id, generate_trace_id, set_trace_id
 from django_inspector.watchers.sql import (
-    SQLWatcher,
     MAX_PARAM_LENGTH,
     MAX_PARAMS,
     MAX_SQL_LENGTH,
-    _QueryStats,
-    _normalize_sql,
+    SQLWatcher,
     _is_inspector_query,
+    _normalize_sql,
+    _QueryStats,
     _safe_params,
     clear_query_log,
 )
-from django_inspector.tracing.context import set_trace_id, clear_trace_id, generate_trace_id
-from django_inspector.storage.flush import _get_buffer, clear_buffer
 
 
 @pytest.fixture(autouse=True)

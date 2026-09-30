@@ -12,7 +12,6 @@ from django.http import HttpResponse
 from django.test import RequestFactory, TestCase, override_settings
 
 from django_inspector.middleware import InspectorMiddleware
-from django_inspector.storage.flush import _buffer_var
 
 
 def _run_middleware(settings_override=None, flush_raises=False):

@@ -182,10 +182,10 @@ class TestEndToEnd(TestCase):
     def setUp(self):
         from django.core.cache import cache
 
-        from tests.asgi_urls import audit, order_checked_out
         from django_inspector.watchers.cache import CacheWatcher
         from django_inspector.watchers.signal import SignalWatcher
         from django_inspector.watchers.template import TemplateWatcher
+        from tests.asgi_urls import audit, order_checked_out
 
         cache.clear()
         for watcher in (CacheWatcher(), TemplateWatcher(), SignalWatcher()):

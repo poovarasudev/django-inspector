@@ -13,6 +13,7 @@ import functools
 import logging
 import time
 from contextvars import ContextVar
+from typing import Optional
 
 from django.template.base import Template
 from django.template.loader_tags import ExtendsNode
@@ -31,7 +32,7 @@ _BUILTIN_CONTEXT_KEYS = frozenset({"True", "False", "None"})
 # Render-tree state for the trace rendering in this context:
 # {"trace_id": str, "next_id": int, "stack": [(render_id, template), ...]}.
 # Replaced with a fresh state whenever the trace id changes.
-_render_state = ContextVar("inspector_template_render_state", default=None)
+_render_state: ContextVar[Optional[dict]] = ContextVar("inspector_template_render_state", default=None)
 
 
 class TemplateWatcher(BaseWatcher):
@@ -129,7 +130,7 @@ def _make_render_wrapper(watcher, original):
         watcher.record_render(template, context, render_id, parent, depth, elapsed_ms(start), None)
         return output
 
-    wrapper._inspector_wrapped = True
+    wrapper._inspector_wrapped = True  # type: ignore[attr-defined]
     return wrapper
 
 

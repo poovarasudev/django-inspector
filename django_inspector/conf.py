@@ -1,7 +1,9 @@
+from typing import Any, Dict
+
 from django.conf import settings as django_settings
 from django.core.signals import setting_changed
 
-DEFAULTS = {
+DEFAULTS: Dict[str, Any] = {
     "INSPECTOR_ENABLED": True,
     "WATCHERS": {
         "request": True,
@@ -12,21 +14,22 @@ DEFAULTS = {
         "signal": False,    # SIGL-06: opt in with {"WATCHERS": {"signal": True}}
         "log": True,        # records at LOG_LEVEL_THRESHOLD or above
     },
-    "DASHBOARD_URL_PREFIX": "inspector/",  # must match where the host mounts django_inspector.dashboard.urls; requests under it are never traced
+    # Must match where the host mounts django_inspector.dashboard.urls; requests under it are never traced.
+    "DASHBOARD_URL_PREFIX": "inspector/",
     "SQL_SLOW_THRESHOLD_MS": 100,
     "SQL_CAPTURE_PARAMS": True,         # store bound SQL parameters (they are never masked by column name)
     "MAX_BODY_SIZE": 8192,
-    "RETENTION_HOURS": None,            # delete events older than this automatically (None = keep until inspector_cleanup)
-    "MAX_EVENTS_PER_TRACE": 1000,       # events kept per request; later ones are counted as events_dropped (0 = no limit)
+    "RETENTION_HOURS": None,            # delete older events automatically; None = keep until inspector_cleanup
+    "MAX_EVENTS_PER_TRACE": 1000,       # events kept per request; later ones count as events_dropped (0 = no limit)
     "SENSITIVE_KEYS": [],               # extra keys to redact (merged additive with built-in defaults in masking.py)
     "SAMPLING_RATE": 1.0,               # fraction of successful requests to capture (0.0–1.0); errors always captured
-    "EARLY_SAMPLING": False,            # decide sampling when a request starts, so unpicked requests skip detailed capture
+    "EARLY_SAMPLING": False,            # decide sampling at the start; unpicked requests skip detailed capture
     "SLOW_REQUEST_THRESHOLD_MS": 1000,  # requests at or above this latency are always captured regardless of rate
     "INSPECTOR_DASHBOARD_PERMISSION": None,  # dotted path to (request) -> bool callable; None = require is_staff
     "INSPECTOR_DASHBOARD_IP_ALLOWLIST": [],  # list of IP address or CIDR strings; empty = no IP restriction
-    "TRUSTED_PROXY_COUNT": 0,           # reverse proxies in front of Django; X-Forwarded-For is trusted for this many hops only
+    "TRUSTED_PROXY_COUNT": 0,           # reverse proxies in front of Django; X-Forwarded-For trusted for this many hops
     "IGNORE_PATHS": [],                 # list of regex strings matched against request.path; matching → skip entirely
-    "IGNORE_EXCEPTIONS": [],            # list of dotted exception class names; matching → not recorded by exception watcher
+    "IGNORE_EXCEPTIONS": [],            # dotted exception class names the exception watcher doesn't record
     "SIGNAL_WATCH_LIST": [              # dotted paths of the signals the signal watcher captures
         "django.db.models.signals.pre_save",
         "django.db.models.signals.post_save",

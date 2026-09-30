@@ -18,8 +18,8 @@ from django.db import connections
 from django_inspector.conf import inspector_settings
 from django_inspector.sampling import detail_enabled
 from django_inspector.tracing.context import get_current_trace_id
-from django_inspector.watchers.base import BaseWatcher
 from django_inspector.watchers import registry
+from django_inspector.watchers.base import BaseWatcher
 from django_inspector.watchers.registry import register
 from django_inspector.watchers.utils import extract_origin
 
@@ -40,8 +40,8 @@ class _QueryStats:
     __slots__ = ("similar", "exact")
 
     def __init__(self):
-        self.similar = Counter()  # normalised SQL -> count
-        self.exact = Counter()    # hash of (SQL, params) -> count
+        self.similar: Counter[str] = Counter()  # normalised SQL -> count
+        self.exact: Counter[int] = Counter()    # hash of (SQL, params) -> count
 
     def add(self, sql, params) -> Tuple[int, int]:
         """Count one query; return (similar count, exact duplicate count)."""

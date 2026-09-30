@@ -19,10 +19,10 @@ from django_inspector.tracing.context import (
 try:
     from asgiref.sync import iscoroutinefunction, markcoroutinefunction
 except ImportError:  # asgiref < 3.6 (Django 4.0/4.1)
-    from asyncio import iscoroutinefunction
+    from asyncio import iscoroutinefunction  # type: ignore[assignment]
 
     def markcoroutinefunction(func):
-        func._is_coroutine = asyncio.coroutines._is_coroutine
+        func._is_coroutine = asyncio.coroutines._is_coroutine  # type: ignore[attr-defined]
         return func
 
 logger = logging.getLogger("django_inspector")

@@ -19,6 +19,8 @@ classifiers = [
     "Framework :: Django",
     "Framework :: Django :: 4.2",
     "Framework :: Django :: 5.2",
+    "Framework :: Django :: 6.0",
+    "Framework :: Django :: 6.1",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
@@ -29,6 +31,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Debuggers",
     "Topic :: System :: Monitoring",
 ]
@@ -43,6 +46,8 @@ dev = [
     "pytest>=7.0",
     "pytest-django>=4.5",
     "coverage>=7.0",
+    "ruff>=0.6",
+    "mypy>=1.10; python_version >= '3.9'",
 ]
 
 [tool.setuptools.packages.find]
@@ -60,3 +65,37 @@ DJANGO_SETTINGS_MODULE = "tests.settings"
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+
+[tool.ruff]
+target-version = "py38"
+line-length = 120
+extend-exclude = ["django_inspector/migrations"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I", "UP", "DJ"]
+# printf-style formatting is the codebase's idiom (it is also lazy in logging calls).
+ignore = ["UP031"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests evaluate attributes for their side effects (e.g. request.POST parses the body).
+"tests/**" = ["B018"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["django_inspector", "tests"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["django_inspector"]
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+exclude = ["django_inspector/migrations/"]
+
+[tool.coverage.run]
+source = ["django_inspector"]
+branch = true
+omit = ["django_inspector/migrations/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

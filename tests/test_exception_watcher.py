@@ -3,14 +3,13 @@
 import pytest
 from django.test import TestCase, override_settings
 
+from django_inspector.storage.flush import _get_buffer, clear_buffer
+from django_inspector.tracing.context import clear_trace_id, generate_trace_id, set_trace_id
 from django_inspector.watchers.exception import (
     ExceptionWatcher,
-    _extract_frames,
-    _safe_locals,
     _extract_chain,
+    _safe_locals,
 )
-from django_inspector.tracing.context import set_trace_id, clear_trace_id, generate_trace_id
-from django_inspector.storage.flush import _get_buffer, clear_buffer
 
 
 @pytest.fixture(autouse=True)
@@ -66,7 +65,7 @@ class TestExceptionWatcher(TestCase):
         """EXC-02: Captures local variables at each stack frame."""
         from django.core.signals import got_request_exception
 
-        local_var = "captured_value"
+        local_var = "captured_value"  # noqa: F841  (captured from the frame)
         try:
             raise RuntimeError("frame test")
         except RuntimeError:
@@ -178,7 +177,7 @@ class TestExtractChain:
             try:
                 raise KeyError("root")
             except KeyError:
-                raise ValueError("wrapper")
+                raise ValueError("wrapper")  # noqa: B904  (implicit chaining is under test)
         except ValueError as e:
             chain = _extract_chain(e)
         assert len(chain) == 1

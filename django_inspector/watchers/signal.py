@@ -15,6 +15,7 @@ import functools
 import logging
 import time
 from contextvars import ContextVar
+from typing import Any, Optional
 
 from django.dispatch import Signal
 from django.utils.module_loading import import_string
@@ -30,7 +31,7 @@ _DISPATCH_METHODS = ("send", "send_robust", "asend", "asend_robust")
 
 # The dispatch in progress in this context; each send* call sets its own, so
 # nested dispatches are tracked separately.
-_current_dispatch = ContextVar("inspector_signal_dispatch", default=None)
+_current_dispatch: ContextVar[Optional[Any]] = ContextVar("inspector_signal_dispatch", default=None)
 
 
 class SignalWatcher(BaseWatcher):
