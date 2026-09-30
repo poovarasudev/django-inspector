@@ -36,6 +36,18 @@
         <div class="inspector-summary-card__value">{{ summary.slow_queries }}</div>
         <div class="inspector-summary-card__label">Slow Queries</div>
     </div>
+    <div class="inspector-summary-card">
+        <div class="inspector-summary-card__value">{{ summary.cache_ops }}</div>
+        <div class="inspector-summary-card__label">Cache Ops</div>
+    </div>
+    <div class="inspector-summary-card">
+        <div class="inspector-summary-card__value">{{ summary.cache_hits }} / {{ summary.cache_misses }}</div>
+        <div class="inspector-summary-card__label">Cache Hits / Misses</div>
+    </div>
+    <div class="inspector-summary-card">
+        <div class="inspector-summary-card__value">{{ summary.template_renders }}</div>
+        <div class="inspector-summary-card__label">Template Renders</div>
+    </div>
 </div>
 
 <!-- View switcher -->
@@ -50,12 +62,14 @@
 <div class="inspector-card">
     <div class="inspector-timeline">
         {% for e in trace_events %}
-        <div class="inspector-timeline-item {% if e.event_type == 'sql.query' %}inspector-timeline-item--sql{% elif e.event_type == 'exception.raised' %}inspector-timeline-item--exception{% else %}inspector-timeline-item--request{% endif %}">
+        <div class="inspector-timeline-item {% if e.event_type == 'sql.query' %}inspector-timeline-item--sql{% elif e.event_type == 'exception.raised' %}inspector-timeline-item--exception{% elif e.event_type in cache_event_types %}inspector-timeline-item--cache{% elif e.event_type == 'template.rendered' %}inspector-timeline-item--template{% else %}inspector-timeline-item--request{% endif %}">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                 <strong style="font-size: 12px; text-transform: uppercase; color: var(--ins-text-secondary);">
                     {% if e.event_type == "request.completed" %}Request
                     {% elif e.event_type == "sql.query" %}SQL Query
                     {% elif e.event_type == "exception.raised" %}Exception
+                    {% elif e.event_type in cache_event_types %}Cache
+                    {% elif e.event_type == "template.rendered" %}Template
                     {% else %}{{ e.event_type }}{% endif %}
                 </strong>
                 <span style="font-size: 12px; color: var(--ins-text-secondary);">{{ e.timestamp|timesince }} ago</span>
@@ -73,6 +87,17 @@
             {% elif e.event_type == "exception.raised" %}
                 <div style="color: var(--ins-status-5xx); font-weight: 600;">{{ e.metadata.exception_type }}</div>
                 <div style="font-size: 13px;">{{ e.metadata.exception_message|truncatechars:120 }}</div>
+            {% elif e.event_type in cache_event_types %}
+                <div><span class="inspector-code-inline">{{ e.metadata.operation }}</span> {% if e.metadata.key_count %}{{ e.metadata.key_count }} keys{% else %}{{ e.metadata.key|truncatechars:80 }}{% endif %}</div>
+                <div style="font-size: 12px; color: var(--ins-text-secondary);">
+                    {{ e.metadata.duration_ms }}ms · {{ e.metadata.alias|default:"-" }}
+                    {% if e.metadata.hit is True %}<span class="inspector-indicator inspector-indicator--hit">HIT</span>{% elif e.metadata.hit is False %}<span class="inspector-indicator inspector-indicator--miss">MISS</span>{% endif %}
+                </div>
+            {% elif e.event_type == "template.rendered" %}
+                <div class="inspector-code-inline">{{ e.metadata.name|default:"(from string)" }}</div>
+                <div style="font-size: 12px; color: var(--ins-text-secondary);">
+                    {{ e.metadata.duration_ms }}ms{% if e.metadata.relation %} · {{ e.metadata.relation }}{% endif %} · depth {{ e.metadata.depth }}
+                </div>
             {% endif %}
         </div>
         {% endfor %}
@@ -86,6 +111,8 @@
         <button class="inspector-tab inspector-tab--active" onclick="switchTab('request-tab')">Request</button>
         <button class="inspector-tab" onclick="switchTab('queries-tab')">Queries ({{ queries|length }})</button>
         <button class="inspector-tab" onclick="switchTab('exceptions-tab')">Exceptions ({{ exceptions|length }})</button>
+        <button class="inspector-tab" onclick="switchTab('cache-tab')">Cache ({{ cache_events|length }})</button>
+        <button class="inspector-tab" onclick="switchTab('templates-tab')">Templates ({{ template_renders|length }})</button>
     </div>
 
     <div id="request-tab" class="inspector-tab-panel inspector-tab-panel--active">
@@ -159,6 +186,63 @@
             </tbody>
         </table>
     </div>
+
+    <div id="cache-tab" class="inspector-tab-panel">
+        <table class="inspector-table">
+            <thead>
+                <tr>
+                    <th>Operation</th>
+                    <th>Key</th>
+                    <th>Result</th>
+                    <th>Cache</th>
+                    <th>Duration</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in cache_events %}
+                <tr>
+                    <td><a href="{% url 'inspector:cache-detail' c.pk %}">{{ c.metadata.operation }}</a></td>
+                    <td class="inspector-code-inline">{% if c.metadata.key_count %}{{ c.metadata.key_count }} keys{% else %}{{ c.metadata.key|truncatechars:80 }}{% endif %}</td>
+                    <td>
+                        {% if c.metadata.hit is True %}<span class="inspector-indicator inspector-indicator--hit">HIT</span>
+                        {% elif c.metadata.hit is False %}<span class="inspector-indicator inspector-indicator--miss">MISS</span>
+                        {% elif c.metadata.hit_count is not None %}{{ c.metadata.hit_count }} / {{ c.metadata.key_count }} hit
+                        {% endif %}
+                    </td>
+                    <td>{{ c.metadata.alias|default:"-" }}</td>
+                    <td>{{ c.metadata.duration_ms }}ms</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--ins-text-secondary);">No cache operations in this trace.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div id="templates-tab" class="inspector-tab-panel">
+        <table class="inspector-table">
+            <thead>
+                <tr>
+                    <th>Template</th>
+                    <th>Relation</th>
+                    <th>Duration</th>
+                    <th>Context keys</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in template_renders %}
+                <tr>
+                    <td style="padding-left: calc(12px + {% widthratio t.metadata.depth 1 16 %}px);"><a href="{% url 'inspector:template-detail' t.pk %}" class="inspector-code-inline">{{ t.metadata.name|default:"(from string)" }}</a></td>
+                    <td>{{ t.metadata.relation|default:"top-level" }}</td>
+                    <td>{{ t.metadata.duration_ms }}ms</td>
+                    <td>{{ t.metadata.context_key_count }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" style="text-align: center; padding: 20px; color: var(--ins-text-secondary);">No template renders in this trace.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 
 <script>
@@ -180,10 +264,12 @@ function switchTab(tabId) {
                 {% if wf.event.event_type == "request.completed" %}Request
                 {% elif wf.event.event_type == "sql.query" %}SQL
                 {% elif wf.event.event_type == "exception.raised" %}Exception
+                {% elif wf.event.event_type in cache_event_types %}Cache
+                {% elif wf.event.event_type == "template.rendered" %}Template
                 {% else %}{{ wf.event.event_type }}{% endif %}
             </div>
             <div class="inspector-waterfall-track">
-                <div class="inspector-waterfall-bar {% if wf.event.event_type == 'request.completed' %}inspector-waterfall-bar--request{% elif wf.event.event_type == 'sql.query' %}inspector-waterfall-bar--sql{% elif wf.event.event_type == 'exception.raised' %}inspector-waterfall-bar--exception{% endif %}"
+                <div class="inspector-waterfall-bar {% if wf.event.event_type == 'request.completed' %}inspector-waterfall-bar--request{% elif wf.event.event_type == 'sql.query' %}inspector-waterfall-bar--sql{% elif wf.event.event_type == 'exception.raised' %}inspector-waterfall-bar--exception{% elif wf.event.event_type in cache_event_types %}inspector-waterfall-bar--cache{% elif wf.event.event_type == 'template.rendered' %}inspector-waterfall-bar--template{% endif %}"
                      style="margin-left: {{ wf.offset_pct }}%; width: {{ wf.width_pct }}%;">
                     {{ wf.duration_ms }}ms
                 </div>

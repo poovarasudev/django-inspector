@@ -61,6 +61,12 @@ def request_detail(request, pk):
 
     queries = [e for e in trace_events if e.event_type == "sql.query"]
     exceptions = [e for e in trace_events if e.event_type == "exception.raised"]
+    cache_events = [e for e in trace_events if e.event_type in CACHE_EVENT_TYPES]
+    template_renders = sorted(
+        (e for e in trace_events if e.event_type == "template.rendered"),
+        key=lambda e: e.metadata.get("render_id") or 0,
+    )
+    cache_hits, cache_misses = _cache_hits_and_misses(cache_events)
 
     total_query_time = sum(e.metadata.get("duration_ms", 0) for e in queries)
     slow_queries = sum(1 for e in queries if e.metadata.get("is_slow"))
@@ -76,6 +82,10 @@ def request_detail(request, pk):
         "slow_queries": slow_queries,
         "n_plus_one": n_plus_one,
         "duplicate": duplicate,
+        "cache_ops": len(cache_events),
+        "cache_hits": cache_hits,
+        "cache_misses": cache_misses,
+        "template_renders": len(template_renders),
     }
 
     # Compute waterfall offsets for trace events
@@ -106,6 +116,9 @@ def request_detail(request, pk):
         "summary": summary,
         "view": view,
         "waterfall_events": waterfall_events,
+        "cache_events": cache_events,
+        "template_renders": template_renders,
+        "cache_event_types": CACHE_EVENT_TYPES,
     }
     return render(request, "inspector/requests/detail.html", context)
 
@@ -271,3 +284,19 @@ def template_detail(request, pk):
         "parent_request": parent_request,
     }
     return render(request, "inspector/template_renders/detail.html", context)
+
+
+def _cache_hits_and_misses(cache_events):
+    """Total hits and misses across get (hit flag) and get_many (hit/miss counts)."""
+    hits = misses = 0
+    for e in cache_events:
+        meta = e.metadata
+        if meta.get("operation") == "get":
+            if meta.get("hit") is True:
+                hits += 1
+            elif meta.get("hit") is False:
+                misses += 1
+        elif meta.get("operation") == "get_many":
+            hits += meta.get("hit_count") or 0
+            misses += meta.get("miss_count") or 0
+    return hits, misses

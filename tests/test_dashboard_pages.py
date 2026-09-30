@@ -177,3 +177,40 @@ class TestTemplatePages(DashboardTestCase):
 
     def test_sidebar_links_to_templates(self):
         assert reverse("inspector:templates-list") in self.body("live-feed")
+
+
+class TestRequestDetailIntegration(DashboardTestCase):
+    def setUp(self):
+        self.request_event = Event.objects.create(
+            trace_id=TRACE, event_type="request.completed",
+            metadata={"method": "GET", "path": "/shop/", "status_code": 200, "latency_ms": 12.0},
+        )
+        cache_event("get", key="profile:alpha", hit=True)
+        cache_event("get", key="profile:beta", hit=False)
+        cache_event("get_many", key=None, keys=["k-one", "k-two", "k-three"],
+                    key_count=3, hit_count=2, miss_count=1)
+        template_event(1, "shop/page.html")
+        template_event(2, "shop/card.html", parent_id=1, depth=1, relation="include")
+
+    def test_summary_counts_cache_and_templates(self):
+        body = self.body("request-detail", self.request_event.pk)
+        assert "Cache Ops" in body
+        assert ">3 / 2<" in body  # hits 1 + 2 from get_many, misses 1 + 1
+        assert "Template Renders" in body
+
+    def test_timeline_labels_cache_and_template_events(self):
+        body = self.body("request-detail", self.request_event.pk)
+        assert "inspector-timeline-item--cache" in body
+        assert "inspector-timeline-item--template" in body
+        assert "profile:alpha" in body
+        assert "shop/card.html" in body
+
+    def test_tabs_view_has_cache_and_templates_tabs(self):
+        body = self.body("request-detail", self.request_event.pk, params={"view": "tabs"})
+        assert "Cache (3)" in body
+        assert "Templates (2)" in body
+
+    def test_waterfall_colours_cache_and_template_bars(self):
+        body = self.body("request-detail", self.request_event.pk, params={"view": "waterfall"})
+        assert "inspector-waterfall-bar--cache" in body
+        assert "inspector-waterfall-bar--template" in body
