@@ -52,6 +52,33 @@ def detail_enabled() -> bool:
     return _detail_var.get()
 
 
+def should_keep(failed: bool, duration_ms=None, early_pick=None) -> bool:
+    """
+    The sampling decision shared by requests and trace(): keep a trace
+    whatever its rate when it failed or ran at or above
+    SLOW_REQUEST_THRESHOLD_MS, or when early sampling already picked it;
+    otherwise drop it when early sampling rejected it, and roll the dice at
+    SAMPLING_RATE for everything else.
+
+    ``duration_ms`` is None when there's nothing to measure it against yet
+    (never true in practice, since callers always know it by the time the
+    trace ends).
+    """
+    from django_inspector.conf import inspector_settings
+
+    rate = inspector_settings.SAMPLING_RATE
+    if rate >= 1.0 or early_pick is True or failed:
+        return True
+
+    slow_threshold = inspector_settings.SLOW_REQUEST_THRESHOLD_MS
+    if duration_ms is not None and duration_ms >= slow_threshold:
+        return True
+
+    if early_pick is False:
+        return False
+    return random.random() < rate
+
+
 def compute_sampling_decision(request, response, early_pick=None) -> bool:
     """
     Compute the final sampling decision given the completed response.
@@ -65,23 +92,12 @@ def compute_sampling_decision(request, response, early_pick=None) -> bool:
     ``early_pick`` is the EARLY_SAMPLING decision: True keeps the request,
     False keeps it only if it failed or was slow, None rolls the dice now.
     """
-    from django_inspector.conf import inspector_settings
-
-    rate = inspector_settings.SAMPLING_RATE
-    if rate >= 1.0 or early_pick is True:
-        return True
-
     status = getattr(response, "status_code", None)
-    if status is not None and status >= 500:
-        return True
+    failed = status is not None and status >= 500
 
-    slow_threshold = inspector_settings.SLOW_REQUEST_THRESHOLD_MS
+    duration_ms = None
     start = getattr(request, "_inspector_start_time", None)
     if start is not None:
-        latency_ms = (time.monotonic() - start) * 1000
-        if latency_ms >= slow_threshold:
-            return True
+        duration_ms = (time.monotonic() - start) * 1000
 
-    if early_pick is False:
-        return False
-    return random.random() < rate
+    return should_keep(failed, duration_ms, early_pick)
