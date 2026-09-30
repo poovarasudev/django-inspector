@@ -42,6 +42,7 @@ DEFAULTS: Dict[str, Any] = {
     "INSPECTOR_RAISE_ERRORS": False,    # if True, inspector-internal errors propagate (useful in dev/tests)
     "TRACE_HEADER": "debug",            # X-Inspector-Trace on kept traces: True, False, or "debug" (only when DEBUG)
     "COMMAND_WATCH_LIST": [],           # CMD-02: management command names to trace; empty = trace nothing
+    "N_PLUS_ONE": "off",                # TEST-04: "off", "warn" or "raise" — dev-mode N+1 reporting; needs DEBUG
 }
 
 

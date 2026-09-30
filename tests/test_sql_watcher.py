@@ -299,3 +299,48 @@ class TestSafeParams:
     def test_dict_params(self):
         result = _safe_params({"id": 42})
         assert result == {"id": "42"}
+
+
+class TestNPlusOneDevMode(TestCase):
+    """TEST-04: N_PLUS_ONE dev-mode reporting, gated on DEBUG."""
+
+    def setUp(self):
+        self.watcher = SQLWatcher()
+        self.watcher.enable()
+        self.token = set_trace_id(generate_trace_id())
+        clear_buffer()
+        clear_query_log()
+
+    def tearDown(self):
+        self.watcher.disable()
+        clear_trace_id(self.token)
+        clear_buffer()
+        clear_query_log()
+
+    def _run_three_similar_queries(self):
+        with connection.cursor() as cursor:
+            for i in range(3):
+                cursor.execute("SELECT * FROM auth_user WHERE id = %s", [i])
+
+    @override_settings(DEBUG=True, DJANGO_INSPECTOR={"N_PLUS_ONE": "warn"})
+    def test_warn_logs_once_per_shape_at_the_third_query(self):
+        with self.assertLogs("django_inspector", level="WARNING") as logs:
+            self._run_three_similar_queries()
+        n_plus_one_logs = [message for message in logs.output if "N+1" in message]
+        assert len(n_plus_one_logs) == 1
+        assert "auth_user" in n_plus_one_logs[0]
+
+    @override_settings(DEBUG=True, DJANGO_INSPECTOR={"N_PLUS_ONE": "raise"})
+    def test_raise_raises_inside_a_request_under_debug(self):
+        from django_inspector.testing import NPlusOneDetected
+
+        with pytest.raises(NPlusOneDetected):
+            self._run_three_similar_queries()
+
+    @override_settings(DEBUG=False, DJANGO_INSPECTOR={"N_PLUS_ONE": "raise"})
+    def test_raise_does_nothing_with_debug_off(self):
+        self._run_three_similar_queries()  # must not raise
+
+    @override_settings(DEBUG=True, DJANGO_INSPECTOR={"N_PLUS_ONE": "off"})
+    def test_off_does_nothing_even_under_debug(self):
+        self._run_three_similar_queries()  # must not raise or warn

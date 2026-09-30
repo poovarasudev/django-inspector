@@ -11,6 +11,7 @@ from collections import Counter
 from contextvars import ContextVar
 from typing import Tuple, Union
 
+from django.conf import settings as django_settings
 from django.db import connections
 
 from django_inspector.conf import inspector_settings
@@ -190,6 +191,13 @@ def _query_wrapper(execute, sql, params, many, context):
     # SQL-06/07: N+1 (3+ similar queries) and exact duplicates, counted in O(1)
     similar_count, duplicate_count = _get_query_log().add(sql, params)
 
+    # TEST-04: dev-mode N+1 reporting, once per shape per trace, DEBUG-gated.
+    # The setting comparison below is the only added cost when it's "off"
+    # (the default): DEBUG is checked only on the rare similar_count == 3 path.
+    n_plus_one_setting = inspector_settings.N_PLUS_ONE
+    if n_plus_one_setting != "off" and similar_count == 3:
+        _report_n_plus_one(n_plus_one_setting, sql, origin)
+
     metadata = {
         "sql": sql[:MAX_SQL_LENGTH],
         "duration_ms": duration_ms,
@@ -222,6 +230,27 @@ def _query_wrapper(execute, sql, params, many, context):
             logger.warning("inspector: error recording sql.query event", exc_info=True)
 
     return result
+
+
+def _report_n_plus_one(setting: str, sql: str, origin: dict) -> None:
+    """TEST-04: N_PLUS_ONE="warn"/"raise" for the shape that just hit its 3rd query."""
+    if not django_settings.DEBUG:
+        return
+    shape = _normalize_sql(sql)
+    if setting == "warn":
+        logger.warning(
+            "django-inspector: N+1 query (3× so far) from %s:%s: %s",
+            origin.get("file"), origin.get("line"), shape,
+        )
+    elif setting == "raise":
+        # Deliberately outside the usual catch-and-log handling below:
+        # surfacing the query is this mode's entire purpose. The query has
+        # already run by this point.
+        from django_inspector.testing.guard import NPlusOneDetected
+
+        raise NPlusOneDetected(
+            "N+1 query (3× so far) from %s:%s: %s" % (origin.get("file"), origin.get("line"), shape)
+        )
 
 
 def _is_inspector_query(sql: str) -> bool:
