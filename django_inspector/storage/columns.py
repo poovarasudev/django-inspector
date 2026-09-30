@@ -52,16 +52,22 @@ def sql_fingerprint(sql: str, db_alias: str) -> str:
     return digest[:FINGERPRINT_LENGTH]
 
 
-def _innermost_app_frame(frames):
+def innermost_app_frame(frames):
     """
     The innermost frame whose file isn't library code, or the innermost frame
     if every one of them is. ``frames`` is ordered outermost to innermost.
+
+    Used both for the exception fingerprint and to show an Issues page
+    exception group the same frame it was grouped by (DASH-04).
     """
     for frame in reversed(frames):
         file = frame.get("file")
         if file and not is_library_file(file):
             return frame
     return frames[-1]
+
+
+_innermost_app_frame = innermost_app_frame  # old name kept as an alias
 
 
 def exception_fingerprint(exception_type: str, frames: list) -> str:
@@ -73,7 +79,7 @@ def exception_fingerprint(exception_type: str, frames: list) -> str:
     """
     file = function = ""
     if frames:
-        frame = _innermost_app_frame(frames)
+        frame = innermost_app_frame(frames)
         file = frame.get("file") or ""
         function = frame.get("function") or ""
     digest = _sha1(("%s\n%s\n%s" % (exception_type, file, function)).encode("utf-8")).hexdigest()
