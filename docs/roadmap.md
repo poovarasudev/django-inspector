@@ -53,6 +53,9 @@ Plans:
 
 ---
 
+<details>
+<summary>✅ Phase 4: Safety & Hardening — COMPLETE 2026-05-23 (128 tests)</summary>
+
 #### Phase 4: Safety & Hardening
 **Goal**: Land the production-safety primitives BEFORE adding more event sources. Masking, sampling, dashboard auth, async-safe buffers, ignore lists, loud-by-default logging.
 **Depends on**: Phase 3 (v1.0)
@@ -71,6 +74,10 @@ Plans:
 - [x] 04-02: Dashboard access control + ignore lists (`ed5daa5`)
 - [x] 04-03: Async-safe buffers (ContextVar) + loud-by-default logging cleanup (`8b483ac`)
 
+Known gaps carried forward: MASK-04 (no Luhn check), MASK-05 (unmasked fallback on masking error), IGN-04 (docs) — see `docs/requirements.md`.
+
+</details>
+
 ---
 
 #### Phase 5: Cache & Template Watchers
@@ -84,11 +91,11 @@ Plans:
   4. Rendering a Django template within a request produces a `template.rendered` event with name, path, duration, and context size.
   5. Nested template includes/extends record parent-child relationships.
   6. Both watchers are async-safe (work under ASGI) and respect `SAMPLING_RATE`.
-**Plans**: TBD — likely 2 plans (one watcher each)
+**Spec**: not started — likely one spec per watcher (`docs/superpowers/specs/`)
 
-Plans:
-- [ ] 05-01: Cache watcher
-- [ ] 05-02: Template watcher
+Work items:
+- [ ] Cache watcher
+- [ ] Template watcher
 
 ---
 
@@ -102,11 +109,11 @@ Plans:
   3. Calling `logging.warning(...)` during a request produces a `log.record` event with logger name, level, message, file, line, and (if present) traceback.
   4. The `django_inspector` logger's own output is excluded from capture.
   5. Configurable level threshold (`LOG_LEVEL_THRESHOLD`) gates which records are captured.
-**Plans**: TBD — likely 2 plans
+**Spec**: not started (`docs/superpowers/specs/`)
 
-Plans:
-- [ ] 06-01: Signal watcher
-- [ ] 06-02: Logging watcher
+Work items:
+- [ ] Signal watcher
+- [ ] Logging watcher
 
 ---
 
@@ -120,11 +127,11 @@ Plans:
   3. `README.md` exists and documents install, settings, mounting, and dashboard auth.
   4. `CHANGELOG.md` lists every v1.1 change with the requirement IDs they satisfy.
   5. `python -m build` produces clean sdist + wheel; smoke install in a fresh venv works.
-**Plans**: TBD — likely 2 plans
+**Spec**: not started (`docs/superpowers/specs/`)
 
-Plans:
-- [ ] 07-01: ASGI end-to-end test app + async coverage for v1.1 watchers
-- [ ] 07-02: Release hygiene — README, CHANGELOG, license reconciliation, build smoke test
+Work items:
+- [ ] ASGI end-to-end test app + async coverage for v1.1 watchers
+- [ ] Release hygiene — README, CHANGELOG, license reconciliation, build smoke test
 
 ---
 
@@ -148,6 +155,28 @@ Phases not yet broken down.
 | 2. Watchers (Request/SQL/Exception) | v1.0 | 1/1 | Complete | 2026-05-03 |
 | 3. Dashboard | v1.0 | 3/3 | Complete | 2026-05-03 |
 | 4. Safety & Hardening | v1.1 | 3/3 | Complete | 2026-05-23 |
-| 5. Cache & Template Watchers | v1.1 | 0/2 | Not started | - |
-| 6. Signal & Logging Watchers | v1.1 | 0/2 | Not started | - |
-| 7. ASGI Verification & Release Prep | v1.1 | 0/2 | Not started | - |
+| 5. Cache & Template Watchers | v1.1 | — | Not started (next) | - |
+| 6. Signal & Logging Watchers | v1.1 | — | Not started | - |
+| 7. ASGI Verification & Release Prep | v1.1 | — | Not started | - |
+
+## How work proceeds
+
+Each phase is worked with the Superpowers flow: brainstorm → spec in `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` → plan in `docs/superpowers/plans/` → execute on a feature branch → finish the branch. When a phase ships, tick its work items here, update the progress table, and update requirement statuses in `docs/requirements.md`. Phases 1–4 were planned with GSD; their plan files live in git history (last present at commit `2afc3ee`, under `.planning/`).
+
+## Open Concerns
+
+Carried over from the GSD state file on 2026-09-30:
+
+- **License inconsistency** (CONCERNS C-11): `pyproject.toml` says MIT, `LICENSE` is Apache-2.0. Reconcile in Phase 7 at the latest.
+- **No README**: `pyproject.toml` references one. Address in Phase 7.
+- **No CI**: nothing runs tests on push. Not blocking v1.1, but add before tagging.
+
+## Deferred Items
+
+| Category | Item | Status | Deferred At |
+|----------|------|--------|-------------|
+| Storage | `AbstractStorageBackend` | Deferred to first non-ORM backend | v1.1 init |
+| Persistence | Async write offload (thread pool / Celery) | Deferred to v1.2 | v1.1 init |
+| Schema | Denormalized event columns (`method`, `status_code`) | Deferred to v1.2 | v1.1 init |
+| Plugins | `setuptools` entry_points for external watchers | Deferred | v1.1 init |
+| Dashboard | Search, comparison, JSON/CSV export | Deferred | v1.1 init |

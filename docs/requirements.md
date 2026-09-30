@@ -45,47 +45,50 @@ Requirements for the v1.1 milestone: close PRD Phase 1 watchers (Cache, Template
 
 ### Sensitive-Data Masking (PRD §14)
 
-- [ ] **MASK-01**: A configurable `SENSITIVE_KEYS` list redacts matching keys (case-insensitive) in request headers, request body, response headers, response body, cookies, query params, and exception locals
-- [ ] **MASK-02**: Default `SENSITIVE_KEYS` includes: `password`, `passwd`, `token`, `secret`, `authorization`, `cookie`, `set-cookie`, `csrfmiddlewaretoken`, `api_key`, `api-key`, `x-api-key`, `access_token`, `refresh_token`, `session`, `sessionid`
-- [ ] **MASK-03**: Redaction replaces values with `"***REDACTED***"`; keys remain visible
+- [x] **MASK-01**: A configurable `SENSITIVE_KEYS` list redacts matching keys (case-insensitive) in request headers, request body, response headers, response body, cookies, query params, and exception locals
+- [x] **MASK-02**: Default `SENSITIVE_KEYS` includes: `password`, `passwd`, `token`, `secret`, `authorization`, `cookie`, `set-cookie`, `csrfmiddlewaretoken`, `api_key`, `api-key`, `x-api-key`, `access_token`, `refresh_token`, `session`, `sessionid`
+- [x] **MASK-03**: Redaction replaces values with `"***REDACTED***"`; keys remain visible
 - [ ] **MASK-04**: A regex-based value matcher catches credit-card-shaped (Luhn-valid 13–19 digits) and JWT-shaped strings regardless of key
+  - ⚠ Partial (Phase 4): Card matcher is shape-only; Luhn validation not implemented.
 - [ ] **MASK-05**: Masking is applied **before** `buffer_event` so unmasked data never reaches the DB
-- [ ] **MASK-06**: Nested dicts and lists in metadata are walked recursively (with depth cap to prevent runaway)
+  - ⚠ Partial (Phase 4): If `mask_metadata` raises, `BaseWatcher.record()` falls back to buffering the **unmasked** event.
+- [x] **MASK-06**: Nested dicts and lists in metadata are walked recursively (with depth cap to prevent runaway)
 
 ### Sampling (PRD §15)
 
-- [ ] **SAMP-01**: A `SAMPLING_RATE` setting (float `0.0`–`1.0`, default `1.0`) controls fraction of successful requests captured
-- [ ] **SAMP-02**: All requests resulting in an unhandled exception are always captured (regardless of sample rate)
-- [ ] **SAMP-03**: All requests with latency above `SLOW_REQUEST_THRESHOLD_MS` (default `1000`) are always captured
-- [ ] **SAMP-04**: Sampling decision is made once at middleware entry and applies to **all** watcher events for that trace (no half-captured traces)
-- [ ] **SAMP-05**: Sampling decision is exposed via `request.inspector_sampled` for downstream code
+- [x] **SAMP-01**: A `SAMPLING_RATE` setting (float `0.0`–`1.0`, default `1.0`) controls fraction of successful requests captured
+- [x] **SAMP-02**: All requests resulting in an unhandled exception are always captured (regardless of sample rate)
+- [x] **SAMP-03**: All requests with latency above `SLOW_REQUEST_THRESHOLD_MS` (default `1000`) are always captured
+- [x] **SAMP-04**: Sampling decision is made once at middleware entry and applies to **all** watcher events for that trace (no half-captured traces)
+- [x] **SAMP-05**: Sampling decision is exposed via `request.inspector_sampled` for downstream code
 
 ### Dashboard Access Control (PRD §14)
 
-- [ ] **AUTH-01**: Dashboard URLs require `user.is_staff` by default; anonymous and non-staff users get 403
-- [ ] **AUTH-02**: An `INSPECTOR_DASHBOARD_PERMISSION` setting accepts a dotted-path callable `(request) -> bool` to override the default check
-- [ ] **AUTH-03**: An optional `INSPECTOR_DASHBOARD_IP_ALLOWLIST` setting (list of CIDRs/IPs) gates access by client IP; empty list = no IP restriction
-- [ ] **AUTH-04**: When `DEBUG=False` and no permission/IP setting is configured, dashboard refuses to mount and logs a clear warning at startup
-- [ ] **AUTH-05**: Permission failure responses do not leak event data (no error pages echoing trace ids, etc.)
+- [x] **AUTH-01**: Dashboard URLs require `user.is_staff` by default; anonymous and non-staff users get 403
+- [x] **AUTH-02**: An `INSPECTOR_DASHBOARD_PERMISSION` setting accepts a dotted-path callable `(request) -> bool` to override the default check
+- [x] **AUTH-03**: An optional `INSPECTOR_DASHBOARD_IP_ALLOWLIST` setting (list of CIDRs/IPs) gates access by client IP; empty list = no IP restriction
+- [x] **AUTH-04**: When `DEBUG=False` and no permission/IP setting is configured, dashboard refuses to mount and logs a clear warning at startup
+- [x] **AUTH-05**: Permission failure responses do not leak event data (no error pages echoing trace ids, etc.)
 
 ### Async-Safe Buffers
 
-- [ ] **ASYNC-01**: SQL query log uses `ContextVar[list]` instead of `threading.local()` — verified by a test that runs two `async def` views concurrently on one thread and asserts logs don't cross
-- [ ] **ASYNC-02**: Event buffer uses `ContextVar[list]` instead of `threading.local()` — same concurrency test
+- [x] **ASYNC-01**: SQL query log uses `ContextVar[list]` instead of `threading.local()` — verified by a test that runs two `async def` views concurrently on one thread and asserts logs don't cross
+- [x] **ASYNC-02**: Event buffer uses `ContextVar[list]` instead of `threading.local()` — same concurrency test
 - [ ] **ASYNC-03**: All v1.1 watchers (Cache, Template, Signal, Logging) are tested under ASGI middleware as well as WSGI
 
 ### Ignore Lists
 
-- [ ] **IGN-01**: `IGNORE_PATHS` setting (list of regex strings, default `[]`) — matched against `request.path`; matching requests are skipped entirely (no trace id, no events)
-- [ ] **IGN-02**: `IGNORE_EXCEPTIONS` setting (list of dotted-path exception class names) — matching exceptions are not recorded by the exception watcher
-- [ ] **IGN-03**: Both lists are checked once per request (compiled regex cached at first use)
+- [x] **IGN-01**: `IGNORE_PATHS` setting (list of regex strings, default `[]`) — matched against `request.path`; matching requests are skipped entirely (no trace id, no events)
+- [x] **IGN-02**: `IGNORE_EXCEPTIONS` setting (list of dotted-path exception class names) — matching exceptions are not recorded by the exception watcher
+- [x] **IGN-03**: Both lists are checked once per request (compiled regex cached at first use)
 - [ ] **IGN-04**: Documented examples for common ignores: `/healthz`, `/metrics`, `django.http.Http404`
+  - ⚠ Partial (Phase 4): Examples not yet documented — lands with the README in Phase 7.
 
 ### Quiet-by-Default Logging
 
-- [ ] **OBS-01**: Every `try/except Exception: pass` block in the package is replaced with `logger.warning("inspector: ...", exc_info=True)` (or `logger.debug` where appropriate)
-- [ ] **OBS-02**: A new `INSPECTOR_RAISE_ERRORS` setting (default `False`) lets developers opt into raising inspector errors during local development
-- [ ] **OBS-03**: Existing "never break the host request" guarantee is preserved when `INSPECTOR_RAISE_ERRORS=False`
+- [x] **OBS-01**: Every `try/except Exception: pass` block in the package is replaced with `logger.warning("inspector: ...", exc_info=True)` (or `logger.debug` where appropriate)
+- [x] **OBS-02**: A new `INSPECTOR_RAISE_ERRORS` setting (default `False`) lets developers opt into raising inspector errors during local development
+- [x] **OBS-03**: Existing "never break the host request" guarantee is preserved when `INSPECTOR_RAISE_ERRORS=False`
 
 ## v2 (Deferred) Requirements
 
@@ -142,16 +145,16 @@ Explicitly excluded from v1.1. Documented to prevent scope creep mid-milestone.
 
 ## Traceability
 
-Populated during roadmap creation; updated as phases complete.
+Update the status when a spec for that phase ships. Specs and plans in `docs/superpowers/` cite these IDs.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ASYNC-01, ASYNC-02 | Phase 4 (Safety & Hardening) | Pending |
-| MASK-01..06 | Phase 4 (Safety & Hardening) | Pending |
-| SAMP-01..05 | Phase 4 (Safety & Hardening) | Pending |
-| AUTH-01..05 | Phase 4 (Safety & Hardening) | Pending |
-| IGN-01..04 | Phase 4 (Safety & Hardening) | Pending |
-| OBS-01..03 | Phase 4 (Safety & Hardening) | Pending |
+| ASYNC-01, ASYNC-02 | Phase 4 (Safety & Hardening) | Done |
+| MASK-01..06 | Phase 4 (Safety & Hardening) | Done — MASK-04, MASK-05 partial |
+| SAMP-01..05 | Phase 4 (Safety & Hardening) | Done |
+| AUTH-01..05 | Phase 4 (Safety & Hardening) | Done |
+| IGN-01..04 | Phase 4 (Safety & Hardening) | Done — IGN-04 partial |
+| OBS-01..03 | Phase 4 (Safety & Hardening) | Done |
 | CACHE-01..07 | Phase 5 (Cache & Template Watchers) | Pending |
 | TMPL-01..05 | Phase 5 (Cache & Template Watchers) | Pending |
 | SIGL-01..06 | Phase 6 (Signal & Logging Watchers) | Pending |
@@ -165,4 +168,4 @@ Populated during roadmap creation; updated as phases complete.
 
 ---
 *Requirements defined: 2026-05-23*
-*Last updated: 2026-05-23 after initial v1.1 definition*
+*Last updated: 2026-09-30 — Phase 4 statuses reconciled against the code during the GSD → Superpowers migration*

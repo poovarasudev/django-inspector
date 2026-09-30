@@ -1,5 +1,7 @@
 # Structure
 
+> **Snapshot:** written at v1.0 (2026-05-23), before Phase 4 added `masking.py`, `sampling.py`, `ignores.py`, `dashboard/auth.py` and the ContextVar buffers. Check the code before relying on details here, and refresh this file when you touch the area it describes.
+
 ## Top-Level Layout
 
 ```
@@ -61,8 +63,9 @@ django-inspector/
 ├── README.md                 # (referenced by pyproject; not present in tree snapshot)
 ├── .gitignore
 ├── .gitattributes
-├── .planning/                # GSD planning artifacts (this directory)
-├── .windsurf/                # GSD / Windsurf skills + workflows + bin
+├── CLAUDE.md                 # Project brief + Superpowers workflow for agent sessions
+├── docs/                     # project.md, requirements.md, roadmap.md, architecture/ (this directory), superpowers/{specs,plans}
+├── .windsurf/                # Windsurf rules + workflows (gitignored)
 ├── .claude/                  # Claude config (gitignored)
 └── .git/
 ```

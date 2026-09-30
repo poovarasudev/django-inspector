@@ -1,5 +1,7 @@
 # Architecture
 
+> **Snapshot:** written at v1.0 (2026-05-23), before Phase 4 added `masking.py`, `sampling.py`, `ignores.py`, `dashboard/auth.py` and the ContextVar buffers. Check the code before relying on details here, and refresh this file when you touch the area it describes.
+
 ## One-Line Summary
 
 `django-inspector` is a pluggable Django app that instruments incoming requests, intercepts SQL queries and exceptions, buffers normalized **Event** records under a per-request `trace_id`, bulk-writes them via the Django ORM at end-of-request, and exposes a server-rendered HTMX dashboard for live feed, request detail (with timeline/waterfall), query inspection, and exception inspection.
