@@ -9,6 +9,7 @@ DEFAULTS = {
         "cache": False,     # CACHE-07: opt in with {"WATCHERS": {"cache": True}}
         "template": False,  # opt in with {"WATCHERS": {"template": True}}
         "signal": False,    # SIGL-06: opt in with {"WATCHERS": {"signal": True}}
+        "log": True,        # records at LOG_LEVEL_THRESHOLD or above
     },
     "DASHBOARD_URL_PREFIX": "inspector/",  # must match where the host mounts django_inspector.dashboard.urls; requests under it are never traced
     "SQL_SLOW_THRESHOLD_MS": 100,
@@ -27,6 +28,7 @@ DEFAULTS = {
         "django.db.models.signals.post_delete",
         "django.db.models.signals.m2m_changed",
     ],
+    "LOG_LEVEL_THRESHOLD": "WARNING",   # level name or number; the log watcher ignores records below it
     "INSPECTOR_RAISE_ERRORS": False,    # if True, inspector-internal errors propagate (useful in dev/tests)
 }
 
