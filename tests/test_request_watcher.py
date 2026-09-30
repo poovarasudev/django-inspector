@@ -7,7 +7,6 @@ from django.http import HttpResponse
 from django_inspector.watchers.request import (
     RequestWatcher,
     _extract_headers,
-    _get_client_ip,
     _get_user_info,
 )
 from django_inspector.tracing.context import set_trace_id, clear_trace_id, generate_trace_id
@@ -123,8 +122,9 @@ class TestRequestWatcher(TestCase):
         buffer = _get_buffer()
         assert len(buffer) == 0
 
-    def test_x_forwarded_for_ip(self):
-        """REQ-05: Checks X-Forwarded-For for client IP."""
+    @override_settings(DJANGO_INSPECTOR={"TRUSTED_PROXY_COUNT": 1})
+    def test_x_forwarded_for_ip_behind_a_trusted_proxy(self):
+        """REQ-05: X-Forwarded-For is used only for TRUSTED_PROXY_COUNT hops."""
         request = self.factory.get(
             "/api/test/",
             HTTP_X_FORWARDED_FOR="10.0.0.1, 192.168.1.1",
@@ -136,7 +136,15 @@ class TestRequestWatcher(TestCase):
 
         buffer = _get_buffer()
         meta = buffer[0]["metadata"]
-        assert meta["client_ip"] == "10.0.0.1"
+        assert meta["client_ip"] == "192.168.1.1"
+
+    def test_x_forwarded_for_is_ignored_by_default(self):
+        request = self.factory.get(
+            "/api/test/", HTTP_X_FORWARDED_FOR="10.0.0.1", REMOTE_ADDR="203.0.113.9"
+        )
+        self.watcher.on_request(request)
+        self.watcher.on_response(request, HttpResponse("ok"))
+        assert _get_buffer()[0]["metadata"]["client_ip"] == "203.0.113.9"
 
 
 class TestExtractHeaders:
@@ -153,17 +161,6 @@ class TestExtractHeaders:
         assert headers["Content-Type"] == "application/json"
         assert headers["Content-Length"] == "42"
 
-
-class TestGetClientIp:
-    def test_xff_takes_priority(self):
-        class FakeRequest:
-            META = {"HTTP_X_FORWARDED_FOR": "1.2.3.4, 5.6.7.8", "REMOTE_ADDR": "127.0.0.1"}
-        assert _get_client_ip(FakeRequest()) == "1.2.3.4"
-
-    def test_falls_back_to_remote_addr(self):
-        class FakeRequest:
-            META = {"REMOTE_ADDR": "192.168.0.1"}
-        assert _get_client_ip(FakeRequest()) == "192.168.0.1"
 
 
 class TestGetUserInfo:

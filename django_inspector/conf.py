@@ -19,6 +19,7 @@ DEFAULTS = {
     "SLOW_REQUEST_THRESHOLD_MS": 1000,  # requests at or above this latency are always captured regardless of rate
     "INSPECTOR_DASHBOARD_PERMISSION": None,  # dotted path to (request) -> bool callable; None = require is_staff
     "INSPECTOR_DASHBOARD_IP_ALLOWLIST": [],  # list of IP address or CIDR strings; empty = no IP restriction
+    "TRUSTED_PROXY_COUNT": 0,           # reverse proxies in front of Django; X-Forwarded-For is trusted for this many hops only
     "IGNORE_PATHS": [],                 # list of regex strings matched against request.path; matching → skip entirely
     "IGNORE_EXCEPTIONS": [],            # list of dotted exception class names; matching → not recorded by exception watcher
     "SIGNAL_WATCH_LIST": [              # dotted paths of the signals the signal watcher captures

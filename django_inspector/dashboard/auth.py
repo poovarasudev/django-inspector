@@ -16,18 +16,12 @@ from functools import wraps
 from django.http import HttpResponseForbidden
 from django.utils.module_loading import import_string
 
+from django_inspector.client_ip import get_client_ip
 from django_inspector.conf import inspector_settings
 
 logger = logging.getLogger("django_inspector")
 
 _FORBIDDEN_BODY = "Inspector: access denied"
-
-
-def _get_client_ip(request) -> str:
-    xff = request.META.get("HTTP_X_FORWARDED_FOR")
-    if xff:
-        return xff.split(",")[0].strip()
-    return request.META.get("REMOTE_ADDR", "")
 
 
 def _ip_allowed(request) -> bool:
@@ -36,7 +30,7 @@ def _ip_allowed(request) -> bool:
     if not allowlist:
         return True
     try:
-        client_ip = ipaddress.ip_address(_get_client_ip(request))
+        client_ip = ipaddress.ip_address(get_client_ip(request))
         for entry in allowlist:
             try:
                 if client_ip in ipaddress.ip_network(entry, strict=False):

@@ -13,8 +13,9 @@ _BUILTIN_SENSITIVE_KEYS = frozenset([
     "password", "passwd", "pwd",
     "token", "access_token", "refresh_token",
     "secret", "api_key", "api-key", "x-api-key",
-    "authorization", "cookie", "set-cookie",
-    "csrfmiddlewaretoken", "csrf_token",
+    "authorization", "proxy-authorization", "x-auth-token",
+    "cookie", "set-cookie",
+    "csrfmiddlewaretoken", "csrf_token", "x-csrftoken", "x-csrf-token",
     "session", "sessionid",
     "private_key", "auth",
 ])

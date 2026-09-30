@@ -112,6 +112,7 @@ DJANGO_INSPECTOR = {
 | `SLOW_REQUEST_THRESHOLD_MS` | `1000` | Requests at or above this latency are always kept, whatever the sampling rate. |
 | `INSPECTOR_DASHBOARD_PERMISSION` | `None` | Dotted path to a `(request) -> bool` callable. `None` means the user must be `is_staff`. |
 | `INSPECTOR_DASHBOARD_IP_ALLOWLIST` | `[]` | IP addresses or CIDR ranges allowed to see the dashboard. Empty means no IP restriction. |
+| `TRUSTED_PROXY_COUNT` | `0` | Number of reverse proxies in front of Django. `X-Forwarded-For` is trusted for this many hops only; `0` uses `REMOTE_ADDR`. Used for the recorded client IP and the IP allowlist. |
 | `IGNORE_PATHS` | `[]` | Regexes matched against `request.path`. Matching requests aren't traced at all. |
 | `IGNORE_EXCEPTIONS` | `[]` | Dotted exception class names the exception watcher skips. |
 | `SIGNAL_WATCH_LIST` | the five model signals | Dotted paths of the signals the signal watcher captures. |
@@ -130,6 +131,8 @@ DJANGO_INSPECTOR = {
     "INSPECTOR_DASHBOARD_IP_ALLOWLIST": ["10.0.0.0/8", "127.0.0.1"],
 }
 ```
+
+The allowlist checks `REMOTE_ADDR` unless you set `TRUSTED_PROXY_COUNT` to the number of reverse proxies in front of Django. `X-Forwarded-For` is never trusted beyond those hops, so a client can't spoof its way past the allowlist.
 
 When both are set, the request must pass both. When `DEBUG = False` and neither is set, the app logs a startup warning: in production, staff status alone is often not the protection you want.
 

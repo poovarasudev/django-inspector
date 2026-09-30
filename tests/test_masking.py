@@ -34,6 +34,10 @@ class TestKeyBasedRedaction:
         result = mask_metadata({"Cookie": "sessionid=abc"})
         assert result["Cookie"] == _REDACTED
 
+    @pytest.mark.parametrize("key", ["X-Csrftoken", "Proxy-Authorization", "X-Auth-Token"])
+    def test_credential_headers_redacted(self, key):
+        assert mask_metadata({key: "abc"})[key] == "***REDACTED***"
+
     def test_non_sensitive_key_passes_through(self):
         result = mask_metadata({"username": "alice", "role": "admin"})
         assert result["username"] == "alice"

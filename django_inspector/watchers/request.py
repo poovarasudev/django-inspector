@@ -9,6 +9,7 @@ import time
 import logging
 from typing import Optional
 
+from django_inspector.client_ip import get_client_ip
 from django_inspector.conf import inspector_settings
 from django_inspector.watchers.base import BaseWatcher
 from django_inspector.watchers.registry import register
@@ -85,7 +86,7 @@ class RequestWatcher(BaseWatcher):
         # REQ-05: user, session, IP
         metadata["user"] = _get_user_info(request)
         metadata["session_id"] = _get_session_id(request)
-        metadata["client_ip"] = _get_client_ip(request)
+        metadata["client_ip"] = get_client_ip(request)
 
         self.record("request.completed", metadata)
 
@@ -153,14 +154,6 @@ def _get_session_id(request) -> Optional[str]:
     if session is None:
         return None
     return getattr(session, "session_key", None)
-
-
-def _get_client_ip(request) -> str:
-    """Extract client IP, checking X-Forwarded-For first."""
-    xff = request.META.get("HTTP_X_FORWARDED_FOR")
-    if xff:
-        return xff.split(",")[0].strip()
-    return request.META.get("REMOTE_ADDR", "")
 
 
 # Auto-register on import
