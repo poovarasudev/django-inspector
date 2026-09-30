@@ -10,6 +10,10 @@
            class="inspector-sidebar-link {% if request.resolver_match.url_name == 'requests-list' or request.resolver_match.url_name == 'request-detail' %}inspector-sidebar-link--active{% endif %}">
             Requests
         </a>
+        <a href="{% url 'inspector:traces-list' %}"
+           class="inspector-sidebar-link {% if request.resolver_match.url_name == 'traces-list' or request.resolver_match.url_name == 'trace-detail' %}inspector-sidebar-link--active{% endif %}">
+            Traces
+        </a>
         <a href="{% url 'inspector:queries-list' %}"
            class="inspector-sidebar-link {% if request.resolver_match.url_name == 'queries-list' or request.resolver_match.url_name == 'query-detail' %}inspector-sidebar-link--active{% endif %}">
             Queries

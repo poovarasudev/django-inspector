@@ -21,6 +21,10 @@ LOG_LEVELS = [(10, "DEBUG"), (20, "INFO"), (30, "WARNING"), (40, "ERROR"), (50, 
 PAGE_SIZE = 25
 MAX_DETAIL_EVENTS = 2000  # events shown on one request's page
 
+# Event types that anchor a non-request trace on /trace/<id>/ and the Traces
+# list. Phases 10 and 15 add command.completed and task.completed.
+TRACE_ANCHOR_TYPES = ("trace.completed",)
+
 _ASSET_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
 _ASSET_TYPES = {
     "htmx.min.js": "application/javascript",
@@ -192,16 +196,66 @@ def request_detail(request, pk):
     return render(request, "inspector/requests/detail.html", context)
 
 
+@ensure_csrf_cookie
 def trace_detail(request, trace_id):
-    """/trace/<id>/: jump to the request page of a trace id (e.g. one found in your logs)."""
-    event = (
-        Event.objects.filter(trace_id=_normalize_trace_id(trace_id), event_type="request.completed")
+    """
+    /trace/<id>/: a request trace redirects to its request page, as before.
+    Otherwise this renders the trace itself — a trace() run, and later a
+    command or task run (CMD-04) — anchored on the first TRACE_ANCHOR_TYPES
+    event in it.
+    """
+    trace_id = _normalize_trace_id(trace_id)
+    request_event = (
+        Event.objects.filter(trace_id=trace_id, event_type="request.completed")
         .order_by("timestamp")
         .first()
     )
-    if event is None:
-        raise Http404("No request with that trace id.")
-    return redirect("inspector:request-detail", pk=event.pk)
+    if request_event is not None:
+        return redirect("inspector:request-detail", pk=request_event.pk)
+
+    trace_events = list(
+        Event.objects.filter(trace_id=trace_id).order_by("timestamp", "id")[: MAX_DETAIL_EVENTS + 1]
+    )
+    if not trace_events:
+        raise Http404("No trace with that id.")
+    trace_truncated = len(trace_events) > MAX_DETAIL_EVENTS
+    trace_events = trace_events[:MAX_DETAIL_EVENTS]
+
+    anchor = next((e for e in trace_events if e.event_type in TRACE_ANCHOR_TYPES), None)
+    waterfall_events = _waterfall(trace_events, anchor) if anchor is not None else []
+
+    context = {
+        "trace_id": trace_id,
+        "anchor": anchor,
+        "trace_events": trace_events,
+        "trace_truncated": trace_truncated,
+        "max_detail_events": MAX_DETAIL_EVENTS,
+        "waterfall_events": waterfall_events,
+        "cache_event_types": CACHE_EVENT_TYPES,
+        "pinned": trace_events[0].pinned,
+    }
+    return render(request, "inspector/traces/detail.html", context)
+
+
+def traces_list(request):
+    """/traces/: non-request traces, newest first (CMD-04)."""
+    qs = Event.objects.filter(event_type__in=TRACE_ANCHOR_TYPES).order_by("-timestamp")
+
+    name = request.GET.get("name", "")
+    status = request.GET.get("status", "")
+
+    if name:
+        qs = qs.filter(metadata__name__icontains=name)
+    if status in ("ok", "error"):
+        qs = qs.filter(metadata__status=status)
+    qs = _filter_dates(request, qs)
+
+    page = _paginate(request, qs)
+    context = {"page": page, "filters": request.GET}
+
+    if request.headers.get("HX-Request"):
+        return render(request, "inspector/traces/_table.html", context)
+    return render(request, "inspector/traces/list.html", context)
 
 
 @csrf_protect
@@ -223,13 +277,12 @@ def trace_pin(request, trace_id):
     return render(request, "inspector/_pin_button.html", {"trace_id": trace_id, "pinned": pinned})
 
 
-def request_export(request, pk):
-    """The request's whole trace as a JSON download."""
-    event = get_object_or_404(Event, pk=pk, event_type="request.completed")
-    events = Event.objects.filter(trace_id=event.trace_id).order_by("timestamp", "id")
+def _trace_export(trace_id, **extra):
+    """A trace's events as a JSON download, shared by request_export and trace_export."""
+    events = Event.objects.filter(trace_id=trace_id).order_by("timestamp", "id")
     data = {
-        "trace_id": event.trace_id,
-        "request_event_id": event.pk,
+        "trace_id": trace_id,
+        **extra,
         "events": [
             {
                 "id": e.pk,
@@ -241,8 +294,22 @@ def request_export(request, pk):
         ],
     }
     response = JsonResponse(data, json_dumps_params={"indent": 2})
-    response["Content-Disposition"] = 'attachment; filename="trace-%s.json"' % event.trace_id
+    response["Content-Disposition"] = 'attachment; filename="trace-%s.json"' % trace_id
     return response
+
+
+def request_export(request, pk):
+    """The request's whole trace as a JSON download."""
+    event = get_object_or_404(Event, pk=pk, event_type="request.completed")
+    return _trace_export(event.trace_id, request_event_id=event.pk)
+
+
+def trace_export(request, trace_id):
+    """trace/<id>/export.json: a non-request trace's whole set of events as a JSON download."""
+    trace_id = _normalize_trace_id(trace_id)
+    if not Event.objects.filter(trace_id=trace_id).exists():
+        raise Http404("No trace with that id.")
+    return _trace_export(trace_id)
 
 
 @lru_cache(maxsize=None)
@@ -421,16 +488,19 @@ def template_detail(request, pk):
 
 def _waterfall(trace_events, request_event):
     """
-    Bar positions for the waterfall view. The request event is stamped with
-    the request's start; other events are stamped when they finished, so a
-    bar starts at (timestamp - duration).
+    Bar positions for the waterfall view. The origin event (a request, or a
+    trace() anchor) is stamped with the trace's start; other events are
+    stamped when they finished, so a bar starts at (timestamp - duration).
     """
     start = request_event.timestamp
-    total_ms = request_event.metadata.get("latency_ms") or 1  # avoid zero division
+    own_duration = request_event.metadata.get("latency_ms")
+    if own_duration is None:
+        own_duration = request_event.metadata.get("duration_ms") or 0
+    total_ms = own_duration or 1  # avoid zero division
     rows = []
     for e in trace_events:
         if e.pk == request_event.pk:
-            offset_ms, duration_ms = 0.0, request_event.metadata.get("latency_ms") or 0
+            offset_ms, duration_ms = 0.0, own_duration
         else:
             duration_ms = e.metadata.get("duration_ms") or 0
             end_ms = (e.timestamp - start).total_seconds() * 1000

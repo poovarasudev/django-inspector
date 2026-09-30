@@ -3,6 +3,7 @@
 import datetime
 import json
 
+import pytest
 from django.contrib.auth.models import AnonymousUser, User
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import resolve, reverse
@@ -28,6 +29,15 @@ def request_event(trace=TRACE, when=None, **metadata):
         method=data.get("method"), path=data.get("path"), status_code=data.get("status_code"),
         duration_ms=data.get("latency_ms"),
         timestamp=when or timezone.now(),
+    )
+
+
+def trace_event(trace_id, name, status="ok", when=None, **metadata):
+    data = {"name": name, "duration_ms": 5.0, "status": status, "error_type": None}
+    data.update(metadata)
+    return Event.objects.create(
+        trace_id=trace_id, event_type="trace.completed", metadata=data,
+        duration_ms=data.get("duration_ms"), timestamp=when or timezone.now(),
     )
 
 
@@ -117,6 +127,106 @@ class TestExport(DashboardClient):
     def test_export_requires_access(self):
         event = request_event()
         assert self.get("request-export", event.pk, user=AnonymousUser()).status_code == 403
+
+    def test_trace_export_downloads_a_non_request_trace(self):
+        trace_id = "c" * 32
+        trace_event(trace_id, "nightly-report")
+        Event.objects.create(trace_id=trace_id, event_type="sql.query", metadata={"sql": "SELECT 1"})
+        Event.objects.create(trace_id="e" * 32, event_type="sql.query", metadata={"sql": "OTHER"})
+        response = self.get("trace-export", trace_id)
+        assert response["Content-Type"] == "application/json"
+        data = json.loads(response.content)
+        assert data["trace_id"] == trace_id
+        assert sorted(e["event_type"] for e in data["events"]) == ["sql.query", "trace.completed"]
+
+    def test_trace_export_404s_for_an_unknown_trace(self):
+        from django.http import Http404
+
+        with pytest.raises(Http404):
+            self.get("trace-export", "d" * 32)
+
+    def test_trace_export_requires_access(self):
+        trace_id = "c" * 32
+        trace_event(trace_id, "nightly-report")
+        assert self.get("trace-export", trace_id, user=AnonymousUser()).status_code == 403
+
+
+class TestTracePage(DashboardClient):
+    def test_renders_a_trace_completed_trace(self):
+        trace_id = "c" * 32
+        trace_event(trace_id, "nightly-report", status="ok", duration_ms=42.5)
+        body = self.body("trace-detail", trace_id)
+        assert "nightly-report" in body
+        assert "42.5" in body or "42.50" in body
+
+    def test_error_status_and_error_type_are_shown(self):
+        trace_id = "c" * 32
+        trace_event(trace_id, "send-digest", status="error", error_type="builtins.ValueError")
+        body = self.body("trace-detail", trace_id)
+        assert "builtins.ValueError" in body
+
+    def test_missing_anchor_still_renders_with_a_notice(self):
+        trace_id = "c" * 32
+        Event.objects.create(trace_id=trace_id, event_type="sql.query", metadata={"sql": "SELECT 1"})
+        body = self.body("trace-detail", trace_id)
+        assert "Incomplete trace" in body
+
+    def test_unknown_trace_id_is_404(self):
+        from django.http import Http404
+
+        with pytest.raises(Http404):
+            self.get("trace-detail", "d" * 32)
+
+    def test_pin_button_is_shown(self):
+        trace_id = "c" * 32
+        trace_event(trace_id, "nightly-report")
+        body = self.body("trace-detail", trace_id)
+        assert reverse("inspector:trace-pin", args=[trace_id]) in body
+
+    def test_requires_access(self):
+        trace_id = "c" * 32
+        trace_event(trace_id, "nightly-report")
+        assert self.get("trace-detail", trace_id, user=AnonymousUser()).status_code == 403
+
+
+class TestTracesList(DashboardClient):
+    def test_lists_non_request_traces(self):
+        trace_event("c" * 32, "nightly-report")
+        request_event(path="/requests-not-here/")
+        body = self.body("traces-list")
+        assert "nightly-report" in body
+        assert "/requests-not-here/" not in body
+
+    def test_filter_by_name_is_case_insensitive(self):
+        trace_event("c" * 32, "nightly-report")
+        trace_event("d" * 32, "send-digest")
+        body = self.body("traces-list", params={"name": "NIGHTLY"})
+        assert "nightly-report" in body
+        assert "send-digest" not in body
+
+    def test_filter_by_status(self):
+        trace_event("c" * 32, "nightly-report", status="ok")
+        trace_event("d" * 32, "send-digest", status="error")
+        body = self.body("traces-list", params={"status": "error"})
+        assert "send-digest" in body
+        assert "nightly-report" not in body
+
+    def test_htmx_request_returns_table_partial(self):
+        trace_event("c" * 32, "nightly-report")
+        path = reverse("inspector:traces-list")
+        request = RequestFactory().get(path, HTTP_HX_REQUEST="true")
+        request.user = User(username="staff", is_staff=True, is_active=True)
+        match = resolve(path)
+        response = match.func(request, *match.args, **match.kwargs)
+        body = response.content.decode()
+        assert "<table" in body
+        assert "inspector-sidebar" not in body
+
+    def test_sidebar_links_to_traces(self):
+        assert reverse("inspector:traces-list") in self.body("live-feed")
+
+    def test_requires_access(self):
+        assert self.get("traces-list", user=AnonymousUser()).status_code == 403
 
 
 class TestDetailCap(DashboardClient):

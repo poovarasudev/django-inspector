@@ -1,0 +1,40 @@
+{% extends "inspector/base.html" %}
+{% block title %}Traces — Inspector{% endblock %}
+{% block content %}
+<div class="inspector-page-header">
+    <h1>Traces</h1>
+</div>
+
+<form class="inspector-filter-bar"
+      hx-get="{% url 'inspector:traces-list' %}"
+      hx-target="#results-table"
+      hx-push-url="true"
+      hx-trigger="change from:select, input[type=text]:keyup changed delay:300ms, change from:input[type=date]">
+    <label>
+        Name
+        <input type="text" name="name" placeholder="Filter name..." value="{{ filters.name|default:'' }}">
+    </label>
+    <label>
+        Status
+        <select name="status">
+            <option value="">All</option>
+            <option value="ok" {% if filters.status == "ok" %}selected{% endif %}>OK</option>
+            <option value="error" {% if filters.status == "error" %}selected{% endif %}>Error</option>
+        </select>
+    </label>
+    <label>
+        From
+        <input type="date" name="from_date" value="{{ filters.from_date|default:'' }}">
+    </label>
+    <label>
+        To
+        <input type="date" name="to_date" value="{{ filters.to_date|default:'' }}">
+    </label>
+</form>
+
+<div id="results-table">
+    {% include "inspector/traces/_table.html" %}
+</div>
+
+{% include "inspector/_pagination.html" %}
+{% endblock %}
