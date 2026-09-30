@@ -7,7 +7,7 @@ Requirements: MASK-01..06
 import pytest
 from django.test import override_settings
 
-from django_inspector.masking import _REDACTED, _REDACTED_DEEP, mask_metadata
+from django_inspector.masking import _REDACTED, _REDACTED_DEEP, mask_metadata, mask_url
 from django_inspector.storage.flush import _get_buffer, clear_buffer
 from django_inspector.tracing.context import clear_trace_id, generate_trace_id, set_trace_id
 from django_inspector.watchers.base import BaseWatcher
@@ -192,3 +192,70 @@ class TestMaskingFailsClosed:
             with pytest.raises(ValueError):
                 self.watcher.record("demo.event", {"password": "hunter2"})
         assert _get_buffer() == []
+
+
+class TestMaskUrl:
+    """mask_url() — HTTP-01: masked before it's ever stored."""
+
+    def test_sensitive_query_param_is_redacted(self):
+        url = mask_url("https://api.example.com/users?api_key=abc123&page=2")
+        assert "abc123" not in url
+        assert "api_key=" + _REDACTED in url
+        assert "page=2" in url
+
+    def test_case_insensitive_query_param_matching(self):
+        url = mask_url("https://api.example.com/x?Api-Key=secret")
+        assert "secret" not in url
+
+    def test_non_sensitive_query_params_pass_through(self):
+        url = mask_url("https://api.example.com/search?q=shoes&sort=price")
+        assert "q=shoes" in url
+        assert "sort=price" in url
+
+    def test_userinfo_is_removed(self):
+        url = mask_url("https://user:hunter2@api.example.com/x")
+        assert "user" not in url
+        assert "hunter2" not in url
+        assert url.startswith("https://api.example.com/x")
+
+    def test_extra_keys_from_settings_are_redacted(self):
+        with override_settings(DJANGO_INSPECTOR={"SENSITIVE_KEYS": ["shared_secret"]}):
+            url = mask_url("https://api.example.com/x?shared_secret=zzz")
+        assert "zzz" not in url
+
+    def test_extra_keys_argument_is_redacted(self):
+        url = mask_url("https://api.example.com/x?my_param=zzz", extra_keys=("my_param",))
+        assert "zzz" not in url
+
+    def test_jwt_in_path_is_redacted(self):
+        jwt = (
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+            ".eyJzdWIiOiIxMjM0NTY3ODkwIn0"
+            ".SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+        )
+        url = mask_url("https://api.example.com/auth/%s/" % jwt)
+        assert jwt not in url
+        assert _REDACTED in url
+
+    def test_card_number_in_query_is_redacted(self):
+        url = mask_url("https://api.example.com/x?note=4111111111111111")
+        assert "4111111111111111" not in url
+
+    def test_path_and_host_are_preserved(self):
+        url = mask_url("https://api.example.com:8443/v1/orders?page=2")
+        assert url.startswith("https://api.example.com:8443/v1/orders?")
+
+    def test_malformed_url_falls_back_to_mask_value(self):
+        # An invalid port makes urlsplit().port raise ValueError; the
+        # fallback masks the raw string (value scanning, not key-based
+        # query redaction, since the URL was never parsed into parts).
+        url = mask_url("http://host:not-a-port/x?cc=4111111111111111")
+        assert "4111111111111111" not in url
+
+    def test_non_string_object_is_stringified_first(self):
+        class FakeURL:
+            def __str__(self):
+                return "https://api.example.com/x?token=secret"
+
+        url = mask_url(str(FakeURL()))
+        assert "secret" not in url
