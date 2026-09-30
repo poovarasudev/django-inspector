@@ -11,6 +11,21 @@ from django_inspector.conf import inspector_settings
 _buffer_var: ContextVar[List[dict]] = ContextVar("inspector_event_buffer", default=None)
 
 
+def start_buffer():
+    """
+    Give the current request its own event buffer. Returns a token for
+    reset_buffer(). Called by the middleware at the start of every request so
+    a buffer inherited from the parent context (e.g. an ASGI server's) is never
+    shared between concurrent requests.
+    """
+    return _buffer_var.set([])
+
+
+def reset_buffer(token) -> None:
+    """Restore the buffer the context had before start_buffer()."""
+    _buffer_var.reset(token)
+
+
 def _get_buffer() -> List[dict]:
     """Return the per-request event buffer (ContextVar-based, async-safe)."""
     buf = _buffer_var.get()

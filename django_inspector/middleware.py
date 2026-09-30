@@ -69,6 +69,7 @@ class InspectorMiddleware:
         token = set_trace_id(trace_id)
         request.inspector_trace_id = trace_id
         set_sampled(True)
+        state_tokens = self._start_request_state()
 
         self._notify_request_start(request)
 
@@ -85,6 +86,7 @@ class InspectorMiddleware:
             try:
                 self._flush()
             finally:
+                self._reset_request_state(state_tokens)
                 clear_trace_id(token)
 
         return response
@@ -106,6 +108,7 @@ class InspectorMiddleware:
         token = set_trace_id(trace_id)
         request.inspector_trace_id = trace_id
         set_sampled(True)
+        state_tokens = self._start_request_state()
 
         self._notify_request_start(request)
 
@@ -122,9 +125,31 @@ class InspectorMiddleware:
             try:
                 await sync_to_async(self._flush)()
             finally:
+                self._reset_request_state(state_tokens)
                 clear_trace_id(token)
 
         return response
+
+    @staticmethod
+    def _start_request_state():
+        """
+        Fresh per-request event buffer and SQL query log. Without this, requests
+        whose context inherits a buffer share one list, and one request's flush
+        can clear another's events mid-flight.
+        """
+        from django_inspector.storage.flush import start_buffer
+        from django_inspector.watchers.sql import start_query_log
+
+        return start_buffer(), start_query_log()
+
+    @staticmethod
+    def _reset_request_state(tokens):
+        from django_inspector.storage.flush import reset_buffer
+        from django_inspector.watchers.sql import reset_query_log
+
+        buffer_token, query_log_token = tokens
+        reset_query_log(query_log_token)
+        reset_buffer(buffer_token)
 
     def _notify_request_start(self, request):
         """Notify the request watcher at start of request."""

@@ -55,6 +55,7 @@ The "v1.1" milestone: finishes the PRD Phase-1 watcher set and makes the package
 
 - **Python 3.8 and 3.9 support.** Three `X | None` type hints made the app crash at startup (`TypeError` in `apps.ready()`) on Python below 3.10.
 - **The dashboard works after `pip install`.** The wheel didn't include the dashboard templates, so every page raised `TemplateDoesNotExist`.
+- **Events could be lost under concurrent ASGI requests.** Each request now gets its own event buffer and SQL query log when it starts. Before, requests whose context already held a buffer shared one list, so one request's flush could clear another request's events before they were written. The shared query log could also mix up N+1 detection between requests. (ASYNC-01, ASYNC-02)
 - **Dashboard requests are no longer traced.** Previously, their auth and session SQL was stored as events that belonged to no request, and the live feed's polling kept adding more.
 
 ### Known gaps

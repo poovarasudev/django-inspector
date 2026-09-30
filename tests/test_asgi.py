@@ -80,6 +80,35 @@ class TestAsyncMiddleware(TestCase):
         assert not hasattr(request, "inspector_trace_id")
         assert await sync_to_async(Event.objects.count)() == 0
 
+    async def test_each_request_gets_its_own_buffers_despite_the_parent_context(self):
+        """A server context that already holds buffers must not leak them into requests.
+
+        Shared buffers let one request's flush clear another request's events
+        mid-flight, so events were lost under concurrency.
+        """
+        import asyncio
+
+        from django_inspector.storage.flush import _get_buffer
+        from django_inspector.watchers.sql import _get_query_log
+
+        parent_buffer, parent_log = _get_buffer(), _get_query_log()
+        seen = []
+
+        async def view(request):
+            seen.append((id(_get_buffer()), id(_get_query_log())))
+            await asyncio.sleep(0)
+            return HttpResponse("ok")
+
+        await asyncio.gather(*(
+            InspectorMiddleware(view)(AsyncRequestFactory().get("/orders/%d/" % i))
+            for i in range(3)
+        ))
+        buffers = {buffer for buffer, _ in seen}
+        logs = {log for _, log in seen}
+        assert len(buffers) == 3 and id(parent_buffer) not in buffers
+        assert len(logs) == 3 and id(parent_log) not in logs
+        assert _get_buffer() is parent_buffer and _get_query_log() is parent_log
+
     async def test_unsampled_request_is_discarded(self):
         with override_settings(DJANGO_INSPECTOR={"SAMPLING_RATE": 0.0}):
             request, _ = await self.run_async("/orders/")

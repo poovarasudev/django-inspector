@@ -168,6 +168,21 @@ class TestDashboardPathsAreNotTraced(TestCase):
         assert not hasattr(request, "inspector_trace_id")
         assert Event.objects.count() == 0
 
+    def test_sync_request_gets_its_own_buffer(self):
+        from django_inspector.middleware import InspectorMiddleware
+        from django_inspector.storage.flush import _get_buffer
+
+        parent = _get_buffer()
+        seen = []
+
+        def view(req):
+            seen.append(_get_buffer())
+            return HttpResponse("ok")
+
+        InspectorMiddleware(view)(RequestFactory().get("/orders/"))
+        assert seen[0] is not parent
+        assert _get_buffer() is parent
+
     def test_lookalike_path_is_still_traced(self):
         Event.objects.all().delete()
         request = self._run("/inspectors-guide/")

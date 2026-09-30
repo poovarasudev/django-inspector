@@ -32,6 +32,16 @@ def _get_query_log():
     return log
 
 
+def start_query_log():
+    """Give the current request its own query log; returns a token for reset_query_log()."""
+    return _query_log_var.set([])
+
+
+def reset_query_log(token):
+    """Restore the query log the context had before start_query_log()."""
+    _query_log_var.reset(token)
+
+
 def clear_query_log():
     """Clear the per-request query log. Called at end-of-request."""
     log = _query_log_var.get()
