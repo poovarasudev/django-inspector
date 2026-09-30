@@ -119,10 +119,10 @@ From the product discovery in `docs/discovery/2026-09-30-next-features.md`. Phas
 
 ### Query Guard for Tests — Phase 11
 
-- [ ] **TEST-01**: `django_inspector.testing.assert_queries(max=, no_n_plus_one=, no_duplicates=)` works as a context manager with the middleware off and no trace, and writes nothing to the database
-- [ ] **TEST-02**: A failure message lists each offending query shape with its count and where it was run from
-- [ ] **TEST-03**: A pytest fixture (registered only when pytest is installed) and a `TestCase` decorator wrap the same guard
-- [ ] **TEST-04**: An `N_PLUS_ONE` setting (`"off"`, `"warn"`, `"raise"`) reports N+1 queries during development; `"raise"` only takes effect when `DEBUG` is on
+- [x] **TEST-01**: `django_inspector.testing.assert_queries(max=, no_n_plus_one=, no_duplicates=)` works as a context manager with the middleware off and no trace, and writes nothing to the database
+- [x] **TEST-02**: A failure message lists each offending query shape with its count and where it was run from
+- [x] **TEST-03**: A pytest fixture (registered only when pytest is installed) and a `TestCase` decorator wrap the same guard
+- [x] **TEST-04**: An `N_PLUS_ONE` setting (`"off"`, `"warn"`, `"raise"`) reports N+1 queries during development; `"raise"` only takes effect when `DEBUG` is on
 
 ### Issues Overview and Export (PRD §12) — Phase 12
 
@@ -215,7 +215,7 @@ Update the status when a spec for that phase ships. Specs and plans in `docs/sup
 | SCHEMA-01..06 | Phase 8 (Event Schema v2) | Done |
 | TRACE-01..07, CMD-04 | Phase 9 (Trace API) | Done |
 | CMD-01..03 | Phase 10 (Management Command Watcher) | Done |
-| TEST-01..04 | Phase 11 (Query Guard for Tests) | Planned |
+| TEST-01..04 | Phase 11 (Query Guard for Tests) | Done |
 | DASH-03, DASH-04 | Phase 12 (Issues Page & CSV Export) | Planned |
 | MAIL-01..03 | Phase 13 (Email Watcher) | Planned |
 | HTTP-01..03 | Phase 14 (HTTP Client Watcher) | Planned |

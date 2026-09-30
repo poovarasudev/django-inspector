@@ -155,6 +155,73 @@ A traced run gets a `command.completed` anchor with its name, args, options (mas
 
 **Long commands.** A traced command's buffer flushes every 500 events instead of holding everything until the end, so memory stays flat and a killed command keeps whatever it already flushed (the trace page shows it with an "incomplete trace" notice — no anchor was ever recorded). `MAX_EVENTS_PER_TRACE` still applies to a command's total event count; set it to `0` for unlimited, chunked capture on a command that legitimately produces very many events.
 
+## Catching N+1 queries in tests
+
+`django_inspector.testing.assert_queries()` fails a test that breaks a query budget — no trace, middleware, buffer or database write is involved, so it works whether or not the inspector's own watchers are installed:
+
+```python
+from django.test import TestCase
+from django_inspector.testing import assert_queries
+
+class OrderViewTests(TestCase):
+    def test_order_list_has_no_n_plus_one(self):
+        with assert_queries(max=5, no_n_plus_one=True, no_duplicates=True) as guard:
+            self.client.get("/orders/")
+        assert len(guard.queries) <= 5  # guard.queries: CapturedQuery(sql, params, alias, duration_ms, file, line, function)
+```
+
+It also works as a function decorator (sync or async), a `TestCase` method decorator, and a `TestCase` class decorator (every attribute starting with `test` that's callable is wrapped):
+
+```python
+@assert_queries(max=3)
+def test_view(client):
+    client.get("/orders/")
+
+@assert_queries(no_n_plus_one=True)
+class OrderViewTests(TestCase):
+    def test_list(self):
+        ...
+    def test_detail(self):
+        ...
+```
+
+A failing budget raises `QueryBudgetExceeded` (an `AssertionError`) naming each offending query shape, its count, and up to three `file:line (function)` origins:
+
+```
+Query budget exceeded: 1 N+1 shape
+
+N+1 queries:
+  3× SELECT * FROM "orders_lineitem" WHERE "order_id" = ?
+    orders/views.py:42 (order_list)
+```
+
+Bound parameters are never printed in the message — they can hold secrets — but `guard.queries` carries them for your own assertions. `using` picks which database aliases are guarded: `None` (default) guards every alias in `connections`, a string guards one, and a list guards those.
+
+**Thread note.** The guard only sees queries run on the thread it was entered on — the request/response cycle through Django's test client, and `sync_to_async(thread_sensitive=True)` code, both run there. Queries from another thread (e.g. a thread pool) aren't captured.
+
+**pytest.** Installing django-inspector registers a `pytest11` entry point that adds an `assert_queries` fixture (the same factory, so you don't need to import it) and an `@pytest.mark.inspector_queries(max=..., no_n_plus_one=..., no_duplicates=..., using=...)` marker that wraps the whole test call in one guard:
+
+```python
+def test_order_list(client, assert_queries):
+    with assert_queries(max=5):
+        client.get("/orders/")
+
+@pytest.mark.django_db
+@pytest.mark.inspector_queries(max=5, no_n_plus_one=True)
+def test_order_list(client):
+    client.get("/orders/")
+```
+
+The marker still needs `pytest-django`'s `db`/`django_db` for database access; it doesn't grant it.
+
+**Development mode.** The `N_PLUS_ONE` setting reports N+1 queries as your app runs, independently of `assert_queries`, only while `settings.DEBUG` is on:
+
+```python
+DJANGO_INSPECTOR = {"N_PLUS_ONE": "warn"}  # or "raise"
+```
+
+`"warn"` logs once per query shape (at its third occurrence) to the `django_inspector` logger; `"raise"` raises `NPlusOneDetected` at that point instead — the query itself has already run. This is a development aid, not a test tool: it only fires inside traced code (a request, `trace()` or a traced command) while `DEBUG` is on.
+
 ## Configuration
 
 Every setting goes in one dict, and every key is optional:
@@ -192,6 +259,7 @@ DJANGO_INSPECTOR = {
 | `INSPECTOR_RAISE_ERRORS` | `False` | Re-raise the inspector's own internal errors instead of logging them. Useful in development and tests. |
 | `TRACE_HEADER` | `"debug"` | `X-Inspector-Trace` on a kept trace's response: `"debug"` sends it only when `settings.DEBUG` is on, `True` always sends it, `False` never does. |
 | `COMMAND_WATCH_LIST` | `[]` | Management command names to trace — see [Tracing management commands](#tracing-management-commands). Empty means no command is traced. |
+| `N_PLUS_ONE` | `"off"` | Dev-mode N+1 reporting while `DEBUG` is on — see [Catching N+1 queries in tests](#catching-n1-queries-in-tests). `"off"`, `"warn"` (log) or `"raise"` (raise `NPlusOneDetected`). |
 
 ### Configuration checks
 

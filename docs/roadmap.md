@@ -225,9 +225,9 @@ Work items:
   4. `N_PLUS_ONE="raise"` raises on an N+1 in a `DEBUG` request and does nothing with `DEBUG` off.
 
 Work items:
-- [ ] `assert_queries` context manager
-- [ ] pytest fixture and `TestCase` decorator
-- [ ] `N_PLUS_ONE` development mode
+- [x] `assert_queries` context manager
+- [x] pytest fixture and `TestCase` decorator
+- [x] `N_PLUS_ONE` development mode
 
 ---
 
@@ -310,7 +310,7 @@ Work items:
 | 8. Event Schema v2 | v1.2 | 1/1 | Complete | 2026-09-30 |
 | 9. Trace API | v1.2 | 1/1 | Complete | 2026-09-30 |
 | 10. Management Command Watcher | v1.2 | 1/1 | Complete | 2026-09-30 |
-| 11. Query Guard for Tests | v1.2 | 0/1 | Planned | - |
+| 11. Query Guard for Tests | v1.2 | 1/1 | Complete | 2026-09-30 |
 | 12. Issues Page & CSV Export | v1.2 | 0/1 | Planned | - |
 | 13. Email Watcher | v1.2 | 0/1 | Planned | - |
 | 14. HTTP Client Watcher | v1.3 | 0/1 | Planned | - |
