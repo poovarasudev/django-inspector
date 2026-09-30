@@ -93,7 +93,7 @@ From the product discovery in `docs/discovery/2026-09-30-next-features.md`. Phas
 
 ### Event Schema v2 (PRD §10) — Phase 8
 
-- [ ] **SCHEMA-01**: New nullable `Event` columns `kind`, `method`, `status_code`, `path` and `duration_ms` are filled when events are written; shipped as a new migration (`0001`/`0002` untouched); existing rows keep NULL
+- [ ] **SCHEMA-01**: New nullable `Event` columns `method`, `status_code`, `path` and `duration_ms` are filled when events are written; shipped as a new migration (`0001`/`0002` untouched); existing rows keep NULL (no `kind` column: a trace's anchor `event_type` already names its kind)
 - [ ] **SCHEMA-02**: A `fingerprint` column groups like events: SQL events by normalised query shape, exceptions by type plus the innermost application frame's file and function (no line numbers, so it survives unrelated edits)
 - [ ] **SCHEMA-03**: A `parent_trace_id` column links a trace to the trace that started it (e.g. a Celery task to its request)
 - [ ] **SCHEMA-04**: A `pinned` flag keeps a trace's events out of `RETENTION_HOURS` pruning and `inspector_cleanup`; the dashboard can pin and unpin a trace

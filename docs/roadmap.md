@@ -155,8 +155,9 @@ Work items:
 **Goal**: Give `Event` the real columns later phases group and filter on, before more watchers multiply the rows.
 **Depends on**: Phase 7
 **Requirements**: SCHEMA-01..06
+**Spec**: [2026-09-30-event-schema-v2-design.md](superpowers/specs/2026-09-30-event-schema-v2-design.md)
 **Success Criteria** (what must be TRUE):
-  1. A new migration adds `kind`, `method`, `status_code`, `path`, `duration_ms`, `fingerprint`, `parent_trace_id` and `pinned`; `0001`/`0002` are unchanged and old rows still display.
+  1. A new migration adds `method`, `status_code`, `path`, `duration_ms`, `fingerprint`, `parent_trace_id` and `pinned`; `0001`/`0002` are unchanged and old rows still display.
   2. Two SQL events with the same query shape share a fingerprint; so do two exceptions of the same type raised from the same function, even after the line moves.
   3. A pinned trace survives `RETENTION_HOURS` pruning and `inspector_cleanup`.
   4. `Event` shows in the Django admin and cannot be edited there.
