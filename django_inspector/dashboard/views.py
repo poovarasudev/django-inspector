@@ -69,6 +69,8 @@ def request_detail(request, pk):
         key=lambda e: e.metadata.get("render_id") or 0,
     )
     cache_hits, cache_misses = _cache_hits_and_misses(cache_events)
+    log_records = [e for e in trace_events if e.event_type == "log.record"]
+    signal_dispatches = [e for e in trace_events if e.event_type == "signal.dispatched"]
 
     total_query_time = sum(e.metadata.get("duration_ms", 0) for e in queries)
     slow_queries = sum(1 for e in queries if e.metadata.get("is_slow"))
@@ -88,6 +90,8 @@ def request_detail(request, pk):
         "cache_hits": cache_hits,
         "cache_misses": cache_misses,
         "template_renders": len(template_renders),
+        "log_records": len(log_records),
+        "signal_dispatches": len(signal_dispatches),
     }
 
     # Compute waterfall offsets for trace events
@@ -121,6 +125,8 @@ def request_detail(request, pk):
         "cache_events": cache_events,
         "template_renders": template_renders,
         "cache_event_types": CACHE_EVENT_TYPES,
+        "log_records": log_records,
+        "signal_dispatches": signal_dispatches,
     }
     return render(request, "inspector/requests/detail.html", context)
 

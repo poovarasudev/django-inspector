@@ -350,3 +350,42 @@ class TestSignalPages(DashboardTestCase):
 
     def test_sidebar_links_to_signals(self):
         assert reverse("inspector:signals-list") in self.body("live-feed")
+
+
+class TestRequestDetailLogsAndSignals(DashboardTestCase):
+    def setUp(self):
+        self.request_event = Event.objects.create(
+            trace_id=TRACE, event_type="request.completed",
+            metadata={"method": "POST", "path": "/checkout/", "status_code": 200, "latency_ms": 20.0},
+        )
+        log_event("WARNING", "stock running low")
+        log_event("ERROR", "payment declined")
+        self.dispatch = signal_event(
+            "django.db.models.signals.post_save", "shop.models.Order",
+            [{"receiver": "shop.receivers.notify_warehouse", "duration_ms": 1.2}],
+        )
+
+    def test_summary_counts_logs_and_signals(self):
+        import re
+
+        body = self.body("request-detail", self.request_event.pk)
+        assert re.search(r'__value">2</div>\s*<div class="inspector-summary-card__label">Log Records', body)
+        assert re.search(r'__value">1</div>\s*<div class="inspector-summary-card__label">Signal Dispatches', body)
+
+    def test_timeline_labels_log_and_signal_events(self):
+        body = self.body("request-detail", self.request_event.pk)
+        assert "inspector-timeline-item--log" in body
+        assert "inspector-timeline-item--signal" in body
+        assert "stock running low" in body
+        assert "shop.models.Order" in body
+
+    def test_tabs_view_has_logs_and_signals_tabs(self):
+        body = self.body("request-detail", self.request_event.pk, params={"view": "tabs"})
+        assert "Logs (2)" in body
+        assert "Signals (1)" in body
+        assert reverse("inspector:signal-detail", args=[self.dispatch.pk]) in body
+
+    def test_waterfall_colours_log_and_signal_bars(self):
+        body = self.body("request-detail", self.request_event.pk, params={"view": "waterfall"})
+        assert "inspector-waterfall-bar--log" in body
+        assert "inspector-waterfall-bar--signal" in body
