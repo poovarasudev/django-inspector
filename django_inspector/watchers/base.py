@@ -82,9 +82,18 @@ class BaseWatcher(abc.ABC):
 
         try:
             masked = mask_metadata(metadata)
-        except Exception:
-            logger.warning("inspector: masking failed, recording unmasked event", exc_info=True)
-            masked = metadata
+        except Exception as exc:
+            # MASK-05: fail closed. Unmasked data never reaches the buffer; a
+            # placeholder keeps the event visible in its trace. Only the
+            # exception type is kept, since its message could contain the data.
+            if inspector_settings.INSPECTOR_RAISE_ERRORS:
+                raise
+            logger.warning(
+                "inspector: masking failed for a %s event; stored a placeholder instead",
+                event_type,
+                exc_info=True,
+            )
+            masked = {"masking_failed": True, "error_type": type(exc).__name__}
 
         buffer_event(trace_id=trace_id, event_type=event_type, metadata=masked)
 

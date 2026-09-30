@@ -8,6 +8,9 @@ import pytest
 from django.test import override_settings
 
 from django_inspector.masking import mask_metadata, _REDACTED, _REDACTED_DEEP
+from django_inspector.storage.flush import _get_buffer, clear_buffer
+from django_inspector.tracing.context import clear_trace_id, generate_trace_id, set_trace_id
+from django_inspector.watchers.base import BaseWatcher
 
 
 class TestKeyBasedRedaction:
@@ -114,3 +117,74 @@ class TestNonDictTypes:
     def test_bool_passes_through(self):
         result = mask_metadata({"flag": True})
         assert result["flag"] is True
+
+
+class TestCardNumbersNeedLuhn:
+    """MASK-04: only Luhn-valid 13–19 digit numbers are treated as card numbers."""
+
+    @pytest.mark.parametrize("value", [
+        "4111111111111111",                    # Visa test number
+        "card 4111 1111 1111 1111 declined",   # grouped with spaces
+        "5555-5555-5555-4444",                 # grouped with dashes
+        "378282246310005",                     # Amex, 15 digits
+        "4111111111111111 12/26",              # card followed by an expiry date
+        "ref:6011111111111117",                # glued to a prefix
+    ])
+    def test_luhn_valid_card_numbers_are_redacted(self, value):
+        assert mask_metadata({"v": value})["v"] == _REDACTED
+
+    @pytest.mark.parametrize("value", [
+        "4111111111111112",                    # right shape, fails Luhn
+        "order 1234567890123 shipped",         # 13-digit id, fails Luhn
+        "at 20260930104422",                   # timestamp, fails Luhn
+        "id 1234567890123456789012345",        # 25 digits: too long for a card
+        "call +1 555-123-4567",                # phone number: too few digits
+    ])
+    def test_other_digit_runs_pass_through(self, value):
+        assert mask_metadata({"v": value})["v"] == value
+
+
+class TestMaskingFailsClosed:
+    """MASK-05: if masking raises, the original metadata never reaches the buffer."""
+
+    class DemoWatcher(BaseWatcher):
+        watcher_name = "demo"
+
+        def install_hooks(self):
+            pass
+
+        def remove_hooks(self):
+            pass
+
+    @pytest.fixture(autouse=True)
+    def _watcher_and_trace(self, monkeypatch):
+        def broken_masking(metadata):
+            raise ValueError("masking blew up on hunter2")
+
+        monkeypatch.setattr("django_inspector.masking.mask_metadata", broken_masking)
+        clear_buffer()
+        token = set_trace_id(generate_trace_id())
+        self.watcher = self.DemoWatcher()
+        self.watcher.enable()
+        yield
+        self.watcher.disable()
+        clear_trace_id(token)
+        clear_buffer()
+
+    def test_a_placeholder_is_recorded_instead_of_the_data(self):
+        self.watcher.record("demo.event", {"password": "hunter2", "note": "hello"})
+        [event] = _get_buffer()
+        assert event["event_type"] == "demo.event"
+        assert event["metadata"] == {"masking_failed": True, "error_type": "ValueError"}
+        assert "hunter2" not in str(event)
+
+    def test_the_failure_is_logged(self, caplog):
+        with caplog.at_level("WARNING", logger="django_inspector"):
+            self.watcher.record("demo.event", {"note": "hello"})
+        assert any("masking failed" in r.getMessage() for r in caplog.records)
+
+    def test_the_error_is_raised_when_raise_errors_is_on(self):
+        with override_settings(DJANGO_INSPECTOR={"INSPECTOR_RAISE_ERRORS": True}):
+            with pytest.raises(ValueError):
+                self.watcher.record("demo.event", {"password": "hunter2"})
+        assert _get_buffer() == []
