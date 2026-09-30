@@ -389,3 +389,11 @@ class TestRequestDetailLogsAndSignals(DashboardTestCase):
         body = self.body("request-detail", self.request_event.pk, params={"view": "waterfall"})
         assert "inspector-waterfall-bar--log" in body
         assert "inspector-waterfall-bar--signal" in body
+
+
+class TestSidebarVersion(DashboardTestCase):
+    def test_sidebar_shows_the_package_version(self):
+        from django_inspector import __version__
+
+        assert __version__ == "0.2.0"
+        assert "v0.2.0" in self.body("live-feed")

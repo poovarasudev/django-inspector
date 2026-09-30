@@ -7,6 +7,7 @@ Requirements: REQ-01..REQ-06
 
 import time
 import logging
+from typing import Optional
 
 from django_inspector.conf import inspector_settings
 from django_inspector.watchers.base import BaseWatcher
@@ -132,7 +133,7 @@ def _safe_response_body(response, max_size: int) -> str:
         return ""
 
 
-def _get_user_info(request) -> str | None:
+def _get_user_info(request) -> Optional[str]:
     """Extract user identifier from request."""
     user = getattr(request, "user", None)
     if user is None:
@@ -146,7 +147,7 @@ def _get_user_info(request) -> str | None:
     return str(getattr(user, "pk", None) or getattr(user, "username", str(user)))
 
 
-def _get_session_id(request) -> str | None:
+def _get_session_id(request) -> Optional[str]:
     """Extract session key from request if available."""
     session = getattr(request, "session", None)
     if session is None:

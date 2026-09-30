@@ -4,14 +4,39 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "django-inspector"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Unified runtime observability and debugging for Django — one trace, full story."
 readme = "README.md"
 license = { text = "MIT" }
+authors = [{ name = "Poovarasu Sekar" }]
 requires-python = ">=3.8"
 dependencies = [
     "django>=4.0",
 ]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Web Environment",
+    "Framework :: Django",
+    "Framework :: Django :: 4.2",
+    "Framework :: Django :: 5.2",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Debuggers",
+    "Topic :: System :: Monitoring",
+]
+
+[project.urls]
+Homepage = "https://github.com/poovarasudev/django-inspector"
+Changelog = "https://github.com/poovarasudev/django-inspector/blob/master/CHANGELOG.md"
+Issues = "https://github.com/poovarasudev/django-inspector/issues"
 
 [project.optional-dependencies]
 dev = [
@@ -23,6 +48,12 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["django_inspector*"]
+
+[tool.setuptools.package-data]
+django_inspector = ["templates/**/*.html"]
+
+[tool.setuptools.dynamic]
+version = { attr = "django_inspector.__version__" }
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "tests.settings"

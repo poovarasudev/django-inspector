@@ -1,3 +1,4 @@
+{% load inspector_tags %}
 <aside class="inspector-sidebar">
     <div class="inspector-sidebar-title">&#128269; Inspector</div>
     <nav class="inspector-sidebar-nav">
@@ -34,5 +35,5 @@
             Exceptions
         </a>
     </nav>
-    <div class="inspector-sidebar-version">v0.1.0</div>
+    <div class="inspector-sidebar-version">v{% inspector_version %}</div>
 </aside>

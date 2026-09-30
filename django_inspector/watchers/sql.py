@@ -8,6 +8,7 @@ Requirements: SQL-01..SQL-07
 import logging
 import time
 from contextvars import ContextVar
+from typing import Union
 
 from django.db import connections
 
@@ -169,7 +170,7 @@ def _is_inspector_query(sql: str) -> bool:
     return "django_inspector_event" in sql_lower
 
 
-def _safe_params(params) -> list | str | None:
+def _safe_params(params) -> Union[list, dict, str, None]:
     """Safely convert query params to a serializable format."""
     if params is None:
         return None
