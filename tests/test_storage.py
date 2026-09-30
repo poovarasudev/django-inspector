@@ -95,6 +95,12 @@ class TestMaxEventsPerTrace:
         buffer_event("ggg", "request.completed", {})
         assert [e["event_type"] for e in _get_buffer()] == ["sql.query", "request.completed"]
 
+    def test_the_trace_completed_event_is_never_dropped(self, settings):
+        settings.DJANGO_INSPECTOR = {"MAX_EVENTS_PER_TRACE": 1}
+        buffer_event("iii", "sql.query", {})
+        buffer_event("iii", "trace.completed", {})
+        assert [e["event_type"] for e in _get_buffer()] == ["sql.query", "trace.completed"]
+
     def test_clear_resets_the_dropped_count(self, settings):
         from django_inspector.storage.flush import dropped_count
 

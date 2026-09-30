@@ -13,9 +13,9 @@ from django_inspector.storage.columns import derive_columns
 
 logger = logging.getLogger("django_inspector")
 
-# The request event is always kept, even past MAX_EVENTS_PER_TRACE: it is the
-# trace's anchor and carries the dropped-event count.
-_NEVER_DROPPED = frozenset({"request.completed"})
+# Anchor events are always kept, even past MAX_EVENTS_PER_TRACE: request.completed
+# carries the dropped-event count, and trace.completed is trace()'s own anchor.
+_NEVER_DROPPED = frozenset({"request.completed", "trace.completed"})
 
 
 class _EventBuffer(list):

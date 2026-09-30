@@ -136,6 +136,71 @@ class TestExceptionWatcher(TestCase):
         assert meta["request_path"] == "/api/fail/"
 
 
+class TestCapture(TestCase):
+    """capture(): the public entry point trace() uses outside a request."""
+
+    def setUp(self):
+        from django.core.signals import got_request_exception
+
+        got_request_exception.receivers.clear()
+        self.watcher = ExceptionWatcher()
+        self.watcher.enable()
+        self.token = set_trace_id(generate_trace_id())
+        clear_buffer()
+
+    def tearDown(self):
+        self.watcher.disable()
+        clear_trace_id(self.token)
+        clear_buffer()
+
+    def test_records_outside_a_request(self):
+        import sys
+
+        try:
+            raise ValueError("no request here")
+        except ValueError:
+            self.watcher.capture(sys.exc_info())
+
+        exc_events = [e for e in _get_buffer() if e["event_type"] == "exception.raised"]
+        assert len(exc_events) == 1
+        assert exc_events[0]["metadata"]["exception_message"] == "no request here"
+        assert "request_method" not in exc_events[0]["metadata"]
+
+    @override_settings(DJANGO_INSPECTOR={"IGNORE_EXCEPTIONS": ["builtins.KeyError"]})
+    def test_honours_ignore_exceptions(self):
+        import sys
+
+        try:
+            raise KeyError("ignored")
+        except KeyError:
+            self.watcher.capture(sys.exc_info())
+
+        assert [e for e in _get_buffer() if e["event_type"] == "exception.raised"] == []
+
+    def test_does_nothing_when_watcher_disabled(self):
+        import sys
+
+        self.watcher.disable()
+        try:
+            raise ValueError("disabled")
+        except ValueError:
+            self.watcher.capture(sys.exc_info())
+        assert [e for e in _get_buffer() if e["event_type"] == "exception.raised"] == []
+
+    def test_signal_path_still_works(self):
+        """The signal handler still records via capture()."""
+        from django.core.signals import got_request_exception
+
+        try:
+            raise ValueError("via signal")
+        except ValueError:
+            got_request_exception.send(sender=self.__class__, request=None)
+
+        exc_events = [e for e in _get_buffer() if e["event_type"] == "exception.raised"]
+        assert len(exc_events) == 1
+        assert exc_events[0]["metadata"]["exception_message"] == "via signal"
+
+
 class TestSafeLocals:
     def test_captures_simple_types(self):
         result = _safe_locals({"x": 42, "name": "test"})

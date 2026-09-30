@@ -61,7 +61,16 @@ class ExceptionWatcher(BaseWatcher):
 
     def _on_exception(self, sender, request=None, **kwargs):
         """Signal handler for unhandled exceptions."""
-        exc_info = sys.exc_info()
+        self.capture(sys.exc_info(), request)
+
+    def capture(self, exc_info, request=None):
+        """
+        Record an exception outside Django's got_request_exception signal,
+        e.g. one caught by trace(). ``exc_info`` is a (type, value, traceback)
+        tuple, as returned by sys.exc_info(). Does nothing when the watcher
+        is disabled or there's no active trace (record()'s own checks), or
+        when the exception is in IGNORE_EXCEPTIONS.
+        """
         exc_type, exc_value, exc_tb = exc_info
 
         if exc_type is None or exc_value is None:
