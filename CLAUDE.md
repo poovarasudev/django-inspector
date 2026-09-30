@@ -39,7 +39,7 @@ Work follows the Superpowers flow:
 3. **Execute** on a feature branch with TDD (`superpowers:subagent-driven-development` or `superpowers:executing-plans`).
 4. **Finish** (`superpowers:finishing-a-development-branch`), then tick the work items in `docs/roadmap.md` and update statuses in `docs/requirements.md` and `docs/project.md`.
 
-v1.1 is complete (package **0.2.0**). Next up: the owner tags and publishes 0.2.0, then **v1.2** gets broken into phases in `docs/roadmap.md` (Model, Email, Management Command, Middleware watchers).
+v1.1 is complete (package **0.2.0**). **v1.2 "Beyond the request"** is in progress on `feat/v1.2-beyond-the-request`: phases 8–13 in `docs/roadmap.md` (schema v2, trace API, command watcher, test query guard, Issues page, email watcher); v1.3 adds the HTTP client and Celery watchers.
 
 ## Constraints
 

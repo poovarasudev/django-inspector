@@ -87,20 +87,75 @@ Requirements for the v1.1 milestone: close PRD Phase 1 watchers (Cache, Template
 - [x] **OBS-02**: A new `INSPECTOR_RAISE_ERRORS` setting (default `False`) lets developers opt into raising inspector errors during local development
 - [x] **OBS-03**: Existing "never break the host request" guarantee is preserved when `INSPECTOR_RAISE_ERRORS=False`
 
+## v1.2 and v1.3 Requirements ("Beyond the request")
+
+From the product discovery in `docs/discovery/2026-09-30-next-features.md`. Phases 8–13 are v1.2 (package 0.3.0); phases 14–15 are v1.3. Each phase's spec may refine the wording of its IDs.
+
+### Event Schema v2 (PRD §10) — Phase 8
+
+- [ ] **SCHEMA-01**: New nullable `Event` columns `kind`, `method`, `status_code`, `path` and `duration_ms` are filled when events are written; shipped as a new migration (`0001`/`0002` untouched); existing rows keep NULL
+- [ ] **SCHEMA-02**: A `fingerprint` column groups like events: SQL events by normalised query shape, exceptions by type plus the innermost application frame's file and function (no line numbers, so it survives unrelated edits)
+- [ ] **SCHEMA-03**: A `parent_trace_id` column links a trace to the trace that started it (e.g. a Celery task to its request)
+- [ ] **SCHEMA-04**: A `pinned` flag keeps a trace's events out of `RETENTION_HOURS` pruning and `inspector_cleanup`; the dashboard can pin and unpin a trace
+- [ ] **SCHEMA-05**: `Event` is registered in the Django admin as read-only (concern C-13)
+- [ ] **SCHEMA-06**: Dashboard list filters on method, status and path use the new columns instead of JSON lookups
+
+### Trace API — Phase 9
+
+- [ ] **TRACE-01**: A public `django_inspector.trace(name, ...)` works as a context manager and a decorator, on sync and async code
+- [ ] **TRACE-02**: `trace()` owns the whole trace lifecycle (trace id, event buffer, query stats, detail flag, sampling, flush, prune, reset); `InspectorMiddleware` is rebuilt on it with no behaviour change
+- [ ] **TRACE-03**: A `trace()` opened while a trace is active joins the outer trace instead of starting a new one
+- [ ] **TRACE-04**: Traces that aren't requests are sampled like requests: failed or slow runs are always kept, others at `SAMPLING_RATE`
+- [ ] **TRACE-05**: Kept request traces carry an `X-Inspector-Trace` response header; a setting controls it and the default sends it only when `DEBUG` is on
+- [ ] **TRACE-06**: A `logging.Filter` sets `record.inspector_trace_id` so application log lines can be matched to traces
+- [ ] **TRACE-07**: Middleware overhead stays within the `scripts/benchmark.py` budget after the refactor
+
+### Management Command Watcher (PRD §11.10) — Phase 10
+
+- [ ] **CMD-01**: Capture command name, args, options, stdout, stderr (bounded), duration, exit code
+- [ ] **CMD-02**: Commands are traced only when listed in `COMMAND_WATCH_LIST`; `runserver`, `test`, `shell`, `migrate` and `inspector_cleanup` are never traced
+- [ ] **CMD-03**: Long commands flush events in chunks and keep bounded query stats, so memory stays flat and a killed command keeps what it already recorded
+- [ ] **CMD-04**: `/trace/<id>/` shows any trace (request, command, task) instead of redirecting only to a request
+
+### Query Guard for Tests — Phase 11
+
+- [ ] **TEST-01**: `django_inspector.testing.assert_queries(max=, no_n_plus_one=, no_duplicates=)` works as a context manager with the middleware off and no trace, and writes nothing to the database
+- [ ] **TEST-02**: A failure message lists each offending query shape with its count and where it was run from
+- [ ] **TEST-03**: A pytest fixture (registered only when pytest is installed) and a `TestCase` decorator wrap the same guard
+- [ ] **TEST-04**: An `N_PLUS_ONE` setting (`"off"`, `"warn"`, `"raise"`) reports N+1 queries during development; `"raise"` only takes effect when `DEBUG` is on
+
+### Issues Overview and Export (PRD §12) — Phase 12
+
+- [ ] **DASH-04**: An Issues page groups exceptions by fingerprint (count, first and last seen, example traces), query shapes (count, p95 duration, requests with an N+1) and endpoints (p50, p95, error rate) over a bounded window; counts are marked as estimates when sampling is on
+- [ ] **DASH-03**: CSV export of dashboard lists (JSON trace export shipped in 0.2.0)
+
+### Email Watcher (PRD §11.9) — Phase 13
+
+- [ ] **MAIL-01**: Capture recipients, subject, HTML/text body, backend, attachments
+- [ ] **MAIL-02**: `.eml` export
+- [ ] **MAIL-03**: The dashboard previews an email's HTML body without running its scripts or loading remote content
+
+### HTTP Client Watcher (PRD §11.14) — Phase 14
+
+- [ ] **HTTP-01**: Outgoing calls made with `requests` and `httpx` (sync and async) are captured with method, masked URL, status, duration and error
+- [ ] **HTTP-02**: `requests` and `httpx` are imported lazily; neither becomes a dependency, and the watcher is a no-op when they aren't installed
+- [ ] **HTTP-03**: Slow hosts appear on the Issues page
+
+### Celery Watcher (PRD §11.12) — Phase 15
+
+- [ ] **CELERY-01**: A task sent during a trace carries that trace's id in its message headers
+- [ ] **CELERY-02**: Each task run is its own trace, linked to the sending trace through `parent_trace_id`
+- [ ] **CELERY-03**: Capture task name, masked args and kwargs, queue, ETA, retries, worker, result state, exception, duration
+- [ ] **CELERY-04**: Celery is imported lazily and offered as an optional extra, never a runtime dependency
+- [ ] **CELERY-05**: The trace page links a request to the tasks it sent, and a task back to its request
+
 ## v2 (Deferred) Requirements
 
-Acknowledged but not in the v1.1 roadmap. Tracked here so they aren't forgotten.
+Acknowledged but not in a planned milestone. Tracked here so they aren't forgotten.
 
 ### Model Watcher (PRD §11.8)
 - **MODEL-01**: Capture create/update/delete on tracked models with old/new field values, bulk operations
 - **MODEL-02**: Configurable per-model opt-in to avoid recording every save
-
-### Email Watcher (PRD §11.9)
-- **MAIL-01**: Capture recipients, subject, HTML/text body, backend, attachments
-- **MAIL-02**: `.eml` export
-
-### Management Command Watcher (PRD §11.10)
-- **CMD-01**: Capture command name, args, options, stdout, stderr, duration, exit code
 
 ### Middleware Watcher (PRD §11.11)
 - **MW-01**: Capture middleware order, per-middleware timing, header mutations
@@ -111,10 +166,9 @@ Acknowledged but not in the v1.1 roadmap. Tracked here so they aren't forgotten.
 ### Retention Policies (PRD §15)
 - **RET-01**: Age-based, count-based, and size-based retention policies enforced automatically (today only manual `inspector_cleanup`)
 
-### Dashboard Search / Comparison / Export (PRD §12)
+### Dashboard Search / Comparison (PRD §12)
 - **DASH-01**: Full-text search across event metadata
 - **DASH-02**: Compare two traces side-by-side
-- **DASH-03**: JSON and CSV export of a trace
 
 ### Plugin Entry Points (PRD §17)
 - **PLUG-01**: `setuptools` `entry_points` group `django_inspector.watchers` so external packages can register watchers without modifying the inspector
@@ -124,21 +178,22 @@ Acknowledged but not in the v1.1 roadmap. Tracked here so they aren't forgotten.
 
 ## Out of Scope
 
-Explicitly excluded from v1.1. Documented to prevent scope creep mid-milestone.
+Explicitly excluded from the planned milestones (v1.1–v1.3). Documented to prevent scope creep mid-milestone.
 
 | Feature | Reason |
 |---------|--------|
-| Celery / scheduler / HTTP-client / Redis watchers (PRD Phase 3) | Deferred to v1.3 milestone — too much surface for v1.1 |
-| DRF / Channels / Admin integrations (PRD Phase 4) | Deferred to v1.4 milestone |
-| OpenTelemetry exporter, distributed tracing | Explicit PRD §5 non-goal for early versions |
+| Scheduler / Redis watchers (PRD Phase 3) | Not planned yet; Celery and HTTP-client watchers are v1.3 phases 14–15 |
+| DRF / Channels integrations (PRD Phase 4) | Deferred to v1.4 milestone (a read-only `Event` admin is SCHEMA-05) |
+| OpenTelemetry exporter, distributed tracing | Explicit PRD §5 non-goal for early versions; Celery tasks get *linked* traces (CELERY-02), not one trace across processes |
 | CPU flame graphs, memory profiling | Explicit PRD §5 non-goal |
 | Frontend / browser RUM | Explicit PRD §5 non-goal |
 | Kubernetes / infra metrics | Explicit PRD §5 non-goal |
 | Non-ORM storage backends | No second backend in scope; introducing the abstraction now is premature |
-| Denormalized event columns (`method`, `status_code`) | Deferred to v1.2; JSON filters are adequate at v1.1 volumes |
 | New runtime dependencies | Package must stay leaf — Django only |
 | Jinja2 template instrumentation | DTL only for v1.1; Jinja2 deferred |
-| Distributed sampling decision propagation (sampling across services) | Single-service v1.1; cross-service is v2.x |
+| Distributed sampling decision propagation (sampling across services) | Cross-service is v2.x; linked Celery traces are sampled on their own |
+| Spans (`span_id`, `parent_span_id`) | Nothing planned needs them; they can come later as an additive migration |
+| Model and Middleware watchers, trace comparison, full-text search, plugins, background writes | Deferred by the 2026-09-30 discovery (§4) |
 
 ## Traceability
 
@@ -157,12 +212,21 @@ Update the status when a spec for that phase ships. Specs and plans in `docs/sup
 | SIGL-01..06 | Phase 6 (Signal & Logging Watchers) | Done |
 | LOG-01..06 | Phase 6 (Signal & Logging Watchers) | Done |
 | ASYNC-03 | Phase 7 (Async / ASGI verification) | Done |
+| SCHEMA-01..06 | Phase 8 (Event Schema v2) | Planned |
+| TRACE-01..07 | Phase 9 (Trace API) | Planned |
+| CMD-01..04 | Phase 10 (Management Command Watcher) | Planned |
+| TEST-01..04 | Phase 11 (Query Guard for Tests) | Planned |
+| DASH-03, DASH-04 | Phase 12 (Issues Page & CSV Export) | Planned |
+| MAIL-01..03 | Phase 13 (Email Watcher) | Planned |
+| HTTP-01..03 | Phase 14 (HTTP Client Watcher) | Planned |
+| CELERY-01..05 | Phase 15 (Celery Watcher) | Planned |
 
 **Coverage:**
 - v1.1 requirements: **53** total (Cache 7 + Template 5 + Signal 6 + Logging 6 + Mask 6 + Samp 5 + Auth 5 + Async 3 + Ignore 4 + Obs 3 + ASYNC-03 already counted)
 - Mapped to phases: **53**
 - Unmapped: **0** ✓
+- v1.2/v1.3 requirements: **34** (Schema 6 + Trace 7 + Cmd 4 + Test 4 + Dash 2 + Mail 3 + HTTP 3 + Celery 5), all mapped to phases 8–15
 
 ---
 *Requirements defined: 2026-05-23*
-*Last updated: 2026-09-30 — Phase 4 statuses reconciled against the code during the GSD → Superpowers migration*
+*Last updated: 2026-09-30 — v1.2/v1.3 requirements added from the next-features discovery*
