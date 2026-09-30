@@ -3,11 +3,15 @@ Event flush manager — buffers events in memory and writes them to the
 database via bulk_create. Called by InspectorMiddleware at end-of-request.
 """
 
+import logging
 from contextvars import ContextVar
 
 from django.utils import timezone
 
 from django_inspector.conf import inspector_settings
+from django_inspector.storage.columns import derive_columns
+
+logger = logging.getLogger("django_inspector")
 
 # The request event is always kept, even past MAX_EVENTS_PER_TRACE: it is the
 # trace's anchor and carries the dropped-event count.
@@ -83,6 +87,22 @@ def dropped_count() -> int:
     return _get_buffer().dropped
 
 
+def _safe_columns(item) -> dict:
+    """
+    The derived columns for one buffered event, or {} (NULL columns) if
+    extraction fails. A failing extractor never loses the event.
+    """
+    try:
+        return derive_columns(item["event_type"], item["metadata"])
+    except Exception:
+        if inspector_settings.INSPECTOR_RAISE_ERRORS:
+            raise
+        logger.warning(
+            "inspector: could not derive columns for a %s event", item["event_type"], exc_info=True
+        )
+        return {}
+
+
 def flush_events() -> int:
     """
     Write all buffered events to the database using bulk_create.
@@ -101,6 +121,7 @@ def flush_events() -> int:
             event_type=item["event_type"],
             metadata=item["metadata"],
             timestamp=item.get("timestamp") or timezone.now(),
+            **_safe_columns(item),
         )
         for item in buffer
     ]

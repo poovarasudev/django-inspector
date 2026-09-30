@@ -127,3 +127,63 @@ def test_request_event_records_start_time_and_dropped_events(client, settings):
     assert request_event.metadata["events_dropped"] == 2
     # The request event is stamped with the request's start, before its children.
     assert request_event.timestamp <= min(e.timestamp for e in others)
+
+
+class TestFlushDerivesColumns:
+    @pytest.mark.django_db
+    def test_flush_writes_derived_columns(self):
+        buffer_event(
+            "iii", "sql.query", {"sql": "SELECT * FROM t WHERE id = 1", "db_alias": "default", "duration_ms": 3.5}
+        )
+        flush_events()
+        event = Event.objects.get(trace_id="iii")
+        assert event.duration_ms == 3.5
+        assert len(event.fingerprint) == 16
+
+    @pytest.mark.django_db
+    def test_a_failing_extractor_still_writes_the_event_with_null_columns(self, settings, caplog):
+        import logging
+
+        settings.DJANGO_INSPECTOR = {}
+        buffer_event("jjj", "sql.query", {"sql": "SELECT 1", "db_alias": "default"})
+        with caplog.at_level(logging.WARNING, logger="django_inspector"):
+            from unittest import mock
+
+            from django_inspector.storage import flush as flush_module
+
+            with mock.patch.object(
+                flush_module, "derive_columns", side_effect=RuntimeError("boom")
+            ):
+                count = flush_events()
+        assert count == 1
+        event = Event.objects.get(trace_id="jjj")
+        assert event.method is None
+        assert event.fingerprint is None
+        assert "could not derive columns" in caplog.text
+
+    @pytest.mark.django_db
+    def test_raise_errors_setting_raises_instead_of_swallowing(self, settings):
+        from unittest import mock
+
+        from django_inspector.storage import flush as flush_module
+
+        settings.DJANGO_INSPECTOR = {"INSPECTOR_RAISE_ERRORS": True}
+        buffer_event("kkk", "sql.query", {"sql": "SELECT 1"})
+        with mock.patch.object(flush_module, "derive_columns", side_effect=RuntimeError("boom")):
+            with pytest.raises(RuntimeError):
+                flush_events()
+
+    @pytest.mark.django_db
+    def test_request_through_the_middleware_fills_columns(self, settings):
+        from django.http import HttpResponse
+        from django.test import RequestFactory
+
+        from django_inspector.middleware import InspectorMiddleware
+
+        settings.DJANGO_INSPECTOR = {}
+        InspectorMiddleware(lambda request: HttpResponse("ok"))(RequestFactory().get("/health/"))
+        event = Event.objects.get(event_type="request.completed")
+        assert event.method == "GET"
+        assert event.path == "/health/"
+        assert event.status_code == 200
+        assert event.duration_ms is not None
