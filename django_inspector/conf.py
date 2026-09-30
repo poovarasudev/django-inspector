@@ -16,6 +16,7 @@ DEFAULTS = {
     "SQL_SLOW_THRESHOLD_MS": 100,
     "SQL_CAPTURE_PARAMS": True,         # store bound SQL parameters (they are never masked by column name)
     "MAX_BODY_SIZE": 8192,
+    "RETENTION_HOURS": None,            # delete events older than this automatically (None = keep until inspector_cleanup)
     "MAX_EVENTS_PER_TRACE": 1000,       # events kept per request; later ones are counted as events_dropped (0 = no limit)
     "SENSITIVE_KEYS": [],               # extra keys to redact (merged additive with built-in defaults in masking.py)
     "SAMPLING_RATE": 1.0,               # fraction of successful requests to capture (0.0–1.0); errors always captured

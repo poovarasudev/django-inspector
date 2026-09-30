@@ -196,6 +196,13 @@ class InspectorMiddleware:
                 raise
             logger.warning("inspector: flush_events failed", exc_info=True)
         try:
+            from django_inspector.storage.retention import maybe_prune
+            maybe_prune()
+        except Exception:
+            if inspector_settings.INSPECTOR_RAISE_ERRORS:
+                raise
+            logger.warning("inspector: pruning old events failed", exc_info=True)
+        try:
             from django_inspector.watchers.sql import clear_query_log
             clear_query_log()
         except Exception:

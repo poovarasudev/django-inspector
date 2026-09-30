@@ -51,6 +51,8 @@ class TestSettingsCheck:
         ("LOG_LEVEL_THRESHOLD", "error"),
         ("LOG_LEVEL_THRESHOLD", 35),
         ("WATCHERS", {"cache": True}),
+        ("RETENTION_HOURS", None),
+        ("RETENTION_HOURS", 48),
     ])
     def test_valid_values_pass(self, key, value):
         with override_settings(DJANGO_INSPECTOR={key: value}):

@@ -108,6 +108,7 @@ DJANGO_INSPECTOR = {
 | `SQL_SLOW_THRESHOLD_MS` | `100` | Queries at or above this duration are flagged as slow. |
 | `SQL_CAPTURE_PARAMS` | `True` | Store bound SQL parameters. They can hold secrets (for example a token being inserted) and are only masked by value pattern, not by column name. Set `False` to store the SQL text only. |
 | `MAX_BODY_SIZE` | `8192` | Request and response bodies are truncated to this many bytes. |
+| `RETENTION_HOURS` | `None` | Delete events older than this many hours automatically. Pruning runs after a request's flush, at most once every 5 minutes per process and 1,000 rows at a time. `None` keeps events until you run `inspector_cleanup`. |
 | `MAX_EVENTS_PER_TRACE` | `1000` | Most events stored per request. Later ones are dropped and counted in the request's `events_dropped`; the request event itself is always kept. `0` means no limit. |
 | `SENSITIVE_KEYS` | `[]` | Extra keys to redact, added to the built-in list (password, token, secret, api_key, authorization, cookie, csrf, session, …). |
 | `SAMPLING_RATE` | `1.0` | Fraction of successful requests to keep (0.0–1.0). 5xx responses are always kept. |
@@ -152,12 +153,15 @@ The dashboard has these pages:
 
 - **Masking.** Before an event is stored, keys matching the sensitive list are redacted anywhere in it. Values holding a Luhn-valid card number or a JWT are also redacted, whatever their key. Masking fails closed: if it ever raises, the event is stored as a `masking_failed` placeholder instead of the original data. Form and JSON bodies (request and response) are parsed and masked before they are stored, and `@sensitive_post_parameters` is honoured. Multipart bodies are only summarised when your view parsed them, binary bodies are stored as a size summary, and the recorded full URL has its sensitive query parameters masked.
 - **Sampling.** Use `SAMPLING_RATE` to limit how much is stored. Errors and slow requests are always kept, so the interesting ones survive. By default every request is captured and the unpicked ones are discarded at the end; set `EARLY_SAMPLING = True` to also skip the capture work for them (their errors and slow requests keep only the request and exception events).
-- **Retention.** Events accumulate until you delete them. Schedule the cleanup command, for example hourly from cron:
+- **Retention.** Events accumulate until you delete them. Set `RETENTION_HOURS` to prune old events automatically, or schedule the cleanup command, for example hourly from cron:
 
   ```bash
   python manage.py inspector_cleanup --hours 24      # delete events older than 24 hours
+  python manage.py inspector_cleanup                 # uses RETENTION_HOURS, or 24
   python manage.py inspector_cleanup --dry-run       # show how many would be deleted
   ```
+
+  Deletes run in batches (`--batch-size`, default 10,000), so a large backlog doesn't lock the table in one long statement.
 
 - **ASGI.** The middleware handles async requests natively. Database writes and the lazy `request.user` stay in a sync context, and concurrent requests never share trace state.
 - **Failure isolation.** The inspector's own errors are caught and logged to the `django_inspector` logger at WARNING, and your request carries on. Set `INSPECTOR_RAISE_ERRORS = True` to surface them while developing.
