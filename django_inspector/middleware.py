@@ -1,4 +1,7 @@
+import asyncio
 import logging
+
+from asgiref.sync import sync_to_async
 
 from django_inspector.conf import inspector_settings
 from django_inspector.sampling import compute_sampling_decision, set_sampled
@@ -7,6 +10,15 @@ from django_inspector.tracing.context import (
     generate_trace_id,
     set_trace_id,
 )
+
+try:
+    from asgiref.sync import iscoroutinefunction, markcoroutinefunction
+except ImportError:  # asgiref < 3.6 (Django 4.0/4.1)
+    from asyncio import iscoroutinefunction
+
+    def markcoroutinefunction(func):
+        func._is_coroutine = asyncio.coroutines._is_coroutine
+        return func
 
 logger = logging.getLogger("django_inspector")
 
@@ -31,10 +43,21 @@ class InspectorMiddleware:
         ]
     """
 
+    sync_capable = True
+    async_capable = True
+
     def __init__(self, get_response):
         self.get_response = get_response
+        # Under ASGI, Django passes an async get_response; serve it natively
+        # instead of making Django adapt this middleware with a thread hop.
+        self.async_mode = iscoroutinefunction(get_response)
+        if self.async_mode:
+            markcoroutinefunction(self)
 
     def __call__(self, request):
+        if self.async_mode:
+            return self.__acall__(request)
+
         if not inspector_settings.is_enabled:
             return self.get_response(request)
 
@@ -61,6 +84,43 @@ class InspectorMiddleware:
         finally:
             try:
                 self._flush()
+            finally:
+                clear_trace_id(token)
+
+        return response
+
+    async def __acall__(self, request):
+        """
+        Async twin of __call__. The request watcher's on_response (which may
+        evaluate the lazy request.user) and the DB flush run through
+        sync_to_async; everything else matches the sync path.
+        """
+        if not inspector_settings.is_enabled:
+            return await self.get_response(request)
+
+        from django_inspector.ignores import is_dashboard_path, should_ignore_path
+        if should_ignore_path(request.path) or is_dashboard_path(request.path):
+            return await self.get_response(request)
+
+        trace_id = generate_trace_id()
+        token = set_trace_id(trace_id)
+        request.inspector_trace_id = trace_id
+        set_sampled(True)
+
+        self._notify_request_start(request)
+
+        try:
+            response = await self.get_response(request)
+            await sync_to_async(self._notify_request_end)(request, response)
+            sampled = compute_sampling_decision(request, response)
+            set_sampled(sampled)
+            request.inspector_sampled = sampled
+            if not sampled:
+                from django_inspector.storage.flush import clear_buffer
+                clear_buffer()
+        finally:
+            try:
+                await sync_to_async(self._flush)()
             finally:
                 clear_trace_id(token)
 
