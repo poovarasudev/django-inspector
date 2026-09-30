@@ -22,8 +22,8 @@ PAGE_SIZE = 25
 MAX_DETAIL_EVENTS = 2000  # events shown on one request's page
 
 # Event types that anchor a non-request trace on /trace/<id>/ and the Traces
-# list. Phases 10 and 15 add command.completed and task.completed.
-TRACE_ANCHOR_TYPES = ("trace.completed",)
+# list. Phase 15 adds task.completed.
+TRACE_ANCHOR_TYPES = ("trace.completed", "command.completed")
 
 _ASSET_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
 _ASSET_TYPES = {
@@ -200,8 +200,8 @@ def request_detail(request, pk):
 def trace_detail(request, trace_id):
     """
     /trace/<id>/: a request trace redirects to its request page, as before.
-    Otherwise this renders the trace itself — a trace() run, and later a
-    command or task run (CMD-04) — anchored on the first TRACE_ANCHOR_TYPES
+    Otherwise this renders the trace itself — a trace() run or a command
+    run, and later a task run — anchored on the first TRACE_ANCHOR_TYPES
     event in it.
     """
     trace_id = _normalize_trace_id(trace_id)
@@ -237,17 +237,23 @@ def trace_detail(request, trace_id):
     return render(request, "inspector/traces/detail.html", context)
 
 
+_TRACE_TYPE_FILTERS = {"trace": "trace.completed", "command": "command.completed"}
+
+
 def traces_list(request):
     """/traces/: non-request traces, newest first (CMD-04)."""
     qs = Event.objects.filter(event_type__in=TRACE_ANCHOR_TYPES).order_by("-timestamp")
 
     name = request.GET.get("name", "")
     status = request.GET.get("status", "")
+    type_ = request.GET.get("type", "")
 
     if name:
         qs = qs.filter(metadata__name__icontains=name)
     if status in ("ok", "error"):
         qs = qs.filter(metadata__status=status)
+    if type_ in _TRACE_TYPE_FILTERS:
+        qs = qs.filter(event_type=_TRACE_TYPE_FILTERS[type_])
     qs = _filter_dates(request, qs)
 
     page = _paginate(request, qs)

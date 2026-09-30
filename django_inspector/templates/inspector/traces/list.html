@@ -23,6 +23,14 @@
         </select>
     </label>
     <label>
+        Type
+        <select name="type">
+            <option value="">All</option>
+            <option value="trace" {% if filters.type == "trace" %}selected{% endif %}>trace()</option>
+            <option value="command" {% if filters.type == "command" %}selected{% endif %}>Command</option>
+        </select>
+    </label>
+    <label>
         From
         <input type="date" name="from_date" value="{{ filters.from_date|default:'' }}">
     </label>

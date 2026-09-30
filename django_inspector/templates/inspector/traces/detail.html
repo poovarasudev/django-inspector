@@ -31,6 +31,34 @@
 <p class="inspector-notice">{{ anchor.metadata.error_type }}</p>
 {% endif %}
 
+{% if anchor.event_type == "command.completed" %}
+<div class="inspector-card">
+    <h2 style="font-size: 14px; margin: 0 0 12px;">Command</h2>
+    <table class="inspector-detail-table">
+        <tr>
+            <th>Exit code</th>
+            <td><span class="inspector-badge {% if anchor.metadata.exit_code == 0 %}inspector-badge--2xx{% else %}inspector-badge--5xx{% endif %}">{{ anchor.metadata.exit_code }}</span></td>
+        </tr>
+        <tr><th>Args</th><td><pre class="inspector-code" style="margin: 0;">{{ anchor.metadata.args|pprint }}</pre></td></tr>
+        <tr><th>Options</th><td><pre class="inspector-code" style="margin: 0;">{{ anchor.metadata.options|pprint }}</pre></td></tr>
+        <tr>
+            <th>Stdout</th>
+            <td>
+                <pre class="inspector-code" style="margin: 0;">{{ anchor.metadata.stdout }}</pre>
+                {% if anchor.metadata.stdout_truncated %}<p class="inspector-notice">Truncated at the capture limit.</p>{% endif %}
+            </td>
+        </tr>
+        <tr>
+            <th>Stderr</th>
+            <td>
+                <pre class="inspector-code" style="margin: 0;">{{ anchor.metadata.stderr }}</pre>
+                {% if anchor.metadata.stderr_truncated %}<p class="inspector-notice">Truncated at the capture limit.</p>{% endif %}
+            </td>
+        </tr>
+    </table>
+</div>
+{% endif %}
+
 <div class="inspector-card">
     <div class="inspector-timeline">
         {% for e in trace_events %}
@@ -38,6 +66,7 @@
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                 <strong style="font-size: 12px; text-transform: uppercase; color: var(--ins-text-secondary);">
                     {% if e.event_type == "trace.completed" %}Trace
+                    {% elif e.event_type == "command.completed" %}Command
                     {% elif e.event_type == "sql.query" %}SQL Query
                     {% elif e.event_type == "exception.raised" %}Exception
                     {% elif e.event_type in cache_event_types %}Cache
@@ -50,6 +79,8 @@
             </div>
             {% if e.event_type == "trace.completed" %}
                 <div>{{ e.metadata.name }} — {{ e.metadata.status }}</div>
+            {% elif e.event_type == "command.completed" %}
+                <div>{{ e.metadata.name }} — {{ e.metadata.status }} (exit {{ e.metadata.exit_code }})</div>
             {% elif e.event_type == "sql.query" %}
                 <div class="inspector-code-inline" style="margin-bottom: 4px;">{{ e.metadata.sql|truncatechars:100 }}</div>
                 <div style="font-size: 12px; color: var(--ins-text-secondary);">
@@ -97,6 +128,7 @@
         <div class="inspector-waterfall-row">
             <div class="inspector-waterfall-label">
                 {% if wf.event.event_type == "trace.completed" %}Trace
+                {% elif wf.event.event_type == "command.completed" %}Command
                 {% elif wf.event.event_type == "sql.query" %}SQL
                 {% elif wf.event.event_type == "exception.raised" %}Exception
                 {% elif wf.event.event_type in cache_event_types %}Cache
@@ -106,7 +138,7 @@
                 {% else %}{{ wf.event.event_type }}{% endif %}
             </div>
             <div class="inspector-waterfall-track">
-                <div class="inspector-waterfall-bar {% if wf.event.event_type == 'trace.completed' %}inspector-waterfall-bar--request{% elif wf.event.event_type == 'sql.query' %}inspector-waterfall-bar--sql{% elif wf.event.event_type == 'exception.raised' %}inspector-waterfall-bar--exception{% elif wf.event.event_type in cache_event_types %}inspector-waterfall-bar--cache{% elif wf.event.event_type == 'template.rendered' %}inspector-waterfall-bar--template{% elif wf.event.event_type == 'log.record' %}inspector-waterfall-bar--log{% elif wf.event.event_type == 'signal.dispatched' %}inspector-waterfall-bar--signal{% endif %}"
+                <div class="inspector-waterfall-bar {% if wf.event.event_type == 'trace.completed' or wf.event.event_type == 'command.completed' %}inspector-waterfall-bar--request{% elif wf.event.event_type == 'sql.query' %}inspector-waterfall-bar--sql{% elif wf.event.event_type == 'exception.raised' %}inspector-waterfall-bar--exception{% elif wf.event.event_type in cache_event_types %}inspector-waterfall-bar--cache{% elif wf.event.event_type == 'template.rendered' %}inspector-waterfall-bar--template{% elif wf.event.event_type == 'log.record' %}inspector-waterfall-bar--log{% elif wf.event.event_type == 'signal.dispatched' %}inspector-waterfall-bar--signal{% endif %}"
                      style="margin-left: {{ wf.offset_pct }}%; width: {{ wf.width_pct }}%;">
                     {{ wf.duration_ms }}ms
                 </div>

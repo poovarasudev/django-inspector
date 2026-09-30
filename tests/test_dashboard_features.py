@@ -41,6 +41,19 @@ def trace_event(trace_id, name, status="ok", when=None, **metadata):
     )
 
 
+def command_trace_event(trace_id, name="backfill", status="ok", when=None, **metadata):
+    data = {
+        "name": name, "command": name, "duration_ms": 5.0, "status": status, "error_type": None,
+        "args": [], "options": {}, "exit_code": 0,
+        "stdout": "", "stdout_truncated": False, "stderr": "", "stderr_truncated": False,
+    }
+    data.update(metadata)
+    return Event.objects.create(
+        trace_id=trace_id, event_type="command.completed", metadata=data,
+        duration_ms=data.get("duration_ms"), timestamp=when or timezone.now(),
+    )
+
+
 class DashboardClient(TestCase):
     def get(self, url_name, *args, params=None, user=None):
         path = reverse("inspector:" + url_name, args=args)
@@ -227,6 +240,60 @@ class TestTracesList(DashboardClient):
 
     def test_requires_access(self):
         assert self.get("traces-list", user=AnonymousUser()).status_code == 403
+
+
+class TestCommandTracePage(DashboardClient):
+    def test_renders_the_command_section(self):
+        trace_id = "c" * 32
+        command_trace_event(
+            trace_id, name="backfill", exit_code=0,
+            args=["--dry-run"], options={"verbosity": 1},
+            stdout="did the thing", stderr="",
+        )
+        body = self.body("trace-detail", trace_id)
+        assert "backfill" in body
+        assert "did the thing" in body
+        assert "--dry-run" in body
+
+    def test_nonzero_exit_code_and_truncated_output_are_shown(self):
+        trace_id = "c" * 32
+        command_trace_event(
+            trace_id, status="error", exit_code=1, stdout="partial", stdout_truncated=True,
+        )
+        body = self.body("trace-detail", trace_id)
+        assert "partial" in body
+        assert "truncat" in body.lower()
+
+    def test_command_traces_appear_on_the_generic_trace_page(self):
+        # /trace/<id>/ handles command.completed the same way it already
+        # handles trace.completed: no redirect, just the trace's own page.
+        trace_id = "c" * 32
+        command_trace_event(trace_id, name="backfill")
+        response = self.get("trace-detail", trace_id)
+        assert response.status_code == 200
+
+
+class TestTracesListTypeFilter(DashboardClient):
+    def test_lists_command_traces_alongside_trace_runs(self):
+        trace_event("c" * 32, "nightly-report")
+        command_trace_event("d" * 32, "backfill")
+        body = self.body("traces-list")
+        assert "nightly-report" in body
+        assert "backfill" in body
+
+    def test_filter_by_type_trace(self):
+        trace_event("c" * 32, "nightly-report")
+        command_trace_event("d" * 32, "backfill")
+        body = self.body("traces-list", params={"type": "trace"})
+        assert "nightly-report" in body
+        assert "backfill" not in body
+
+    def test_filter_by_type_command(self):
+        trace_event("c" * 32, "nightly-report")
+        command_trace_event("d" * 32, "backfill")
+        body = self.body("traces-list", params={"type": "command"})
+        assert "backfill" in body
+        assert "nightly-report" not in body
 
 
 class TestDetailCap(DashboardClient):
