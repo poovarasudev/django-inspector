@@ -235,6 +235,7 @@ Work items:
 **Goal**: A landing page that answers "what should I fix first?".
 **Depends on**: Phase 8
 **Requirements**: DASH-04, DASH-03
+**Spec**: [2026-09-30-issues-page-design.md](superpowers/specs/2026-09-30-issues-page-design.md)
 **Success Criteria** (what must be TRUE):
   1. The Issues page lists exceptions grouped by fingerprint, query shapes and endpoints with the numbers in DASH-04, each linking to example traces.
   2. The page responds in bounded time at the `CappedPaginator` limits on SQLite and PostgreSQL.
