@@ -6,6 +6,7 @@ SECRET_KEY = "django-inspector-test-secret-key"
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.auth",
+    "django.contrib.admin",
     "django_inspector",
 ]
 MIDDLEWARE = [
