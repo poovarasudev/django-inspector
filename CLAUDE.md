@@ -35,7 +35,7 @@ Work follows the Superpowers flow:
 3. **Execute** on a feature branch with TDD (`superpowers:subagent-driven-development` or `superpowers:executing-plans`).
 4. **Finish** (`superpowers:finishing-a-development-branch`), then tick the work items in `docs/roadmap.md` and update statuses in `docs/requirements.md` and `docs/project.md`.
 
-v1.1 is complete (package **0.2.0**). Next up: the owner tags and publishes 0.2.0, then **v1.2** gets broken into phases in `docs/roadmap.md` (Model, Email, Management Command, Middleware watchers). The MASK-05 fail-open fix is the top open item.
+v1.1 is complete (package **0.2.0**). Next up: the owner tags and publishes 0.2.0, then **v1.2** gets broken into phases in `docs/roadmap.md` (Model, Email, Management Command, Middleware watchers).
 
 ## Constraints
 

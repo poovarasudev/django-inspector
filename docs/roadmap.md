@@ -74,7 +74,7 @@ Plans:
 - [x] 04-02: Dashboard access control + ignore lists (`ed5daa5`)
 - [x] 04-03: Async-safe buffers (ContextVar) + loud-by-default logging cleanup (`8b483ac`)
 
-Known gaps carried forward: MASK-04 (no Luhn check), MASK-05 (unmasked fallback on masking error), IGN-04 (docs) — see `docs/requirements.md`.
+Known gaps carried forward: MASK-04 (no Luhn check), MASK-05 (unmasked fallback on masking error), IGN-04 (docs). All resolved: IGN-04 in Phase 7, MASK-04/05 on `fix/masking-fail-closed-luhn`.
 
 </details>
 
@@ -175,7 +175,7 @@ Carried over from the GSD state file on 2026-09-30:
 - ~~License inconsistency~~ — resolved in Phase 7: MIT everywhere.
 - ~~No README~~ — resolved in Phase 7 (`README.md`, `CHANGELOG.md`).
 - ~~No CI~~ — resolved in Phase 7 (`.github/workflows/ci.yml`).
-- **MASK-05 fail-open**: if masking raises, `BaseWatcher.record` stores the event unmasked. Fix before relying on masking for compliance.
+- ~~MASK-05 fail-open~~ — resolved: masking fails closed (placeholder event), and card matching now requires Luhn (MASK-04).
 
 ## Deferred Items
 

@@ -26,7 +26,8 @@ The "v1.1" milestone: finishes the PRD Phase-1 watcher set and makes the package
   - The inspector's own logger is excluded. (LOG-01..06)
 - **Sensitive-data masking** before storage:
   - Built-in sensitive keys, plus extra ones from `SENSITIVE_KEYS`.
-  - Values shaped like card numbers or JWTs are redacted, whatever their key. (MASK-01..03, MASK-06; MASK-04/05 partial, see below)
+  - Values holding a Luhn-valid card number or a JWT are redacted, whatever their key.
+  - Fails closed: if masking raises, a placeholder (`masking_failed`) is stored instead of the data. (MASK-01..06)
 - **Sampling:**
   - `SAMPLING_RATE` controls what fraction of successful requests is kept.
   - 5xx responses and requests at or above `SLOW_REQUEST_THRESHOLD_MS` are always kept. (SAMP-01..05)
@@ -56,12 +57,12 @@ The "v1.1" milestone: finishes the PRD Phase-1 watcher set and makes the package
 - **Python 3.8 and 3.9 support.** Three `X | None` type hints made the app crash at startup (`TypeError` in `apps.ready()`) on Python below 3.10.
 - **The dashboard works after `pip install`.** The wheel didn't include the dashboard templates, so every page raised `TemplateDoesNotExist`.
 - **Events could be lost under concurrent ASGI requests.** Each request now gets its own event buffer and SQL query log when it starts. Before, requests whose context already held a buffer shared one list, so one request's flush could clear another request's events before they were written. The shared query log could also mix up N+1 detection between requests. (ASYNC-01, ASYNC-02)
+- **Masking now fails closed (MASK-05).** Previously, if masking raised (for example because of a bad `SENSITIVE_KEYS` entry), the event was stored **unmasked**. Now a placeholder `{"masking_failed": true, "error_type": ...}` is stored instead, and a warning is logged. With `INSPECTOR_RAISE_ERRORS` on, the error is raised.
+- **Card-number masking checks Luhn (MASK-04).** Previously any 13–19 digit run was redacted, so order ids, timestamps and other long numbers were wiped. Now only numbers that pass the Luhn checksum are redacted, including grouped forms (`4111 1111 1111 1111`, `5555-5555-5555-4444`).
 - **Dashboard requests are no longer traced.** Previously, their auth and session SQL was stored as events that belonged to no request, and the live feed's polling kept adding more.
 
 ### Known gaps
 
-- MASK-05: if masking itself raises, the event is still recorded **unmasked** (with a warning logged). It will fail closed in a later release.
-- MASK-04: card-number detection matches the shape of the number but doesn't run a Luhn check.
 - Event timestamps are set when events are written at the end of the request, so waterfall offsets within a request aren't meaningful yet.
 
 ## [0.1.0] - 2026-05-03

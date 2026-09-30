@@ -23,7 +23,7 @@
 - ✓ **Exception watcher** — type, message, stack, locals, chained `__cause__`/`__context__` via `got_request_exception` — v1.0 (Phase 2)
 - ✓ Dashboard: live feed, requests/queries/exceptions list+detail, filters, HTMX partials, per-trace timeline + waterfall — v1.0 (Phase 3)
 - ✓ `inspector_cleanup --hours N --dry-run` management command — v1.0 (Phase 3)
-- ✓ **Sensitive-data masking** — redact passwords, tokens, cookies, Authorization, CSRF, credit-card-shaped strings; configurable `SENSITIVE_KEYS` (PRD §14) — v1.1 (Phase 4)
+- ✓ **Sensitive-data masking** — redact passwords, tokens, cookies, Authorization, CSRF, Luhn-valid card numbers and JWTs; configurable `SENSITIVE_KEYS`; fails closed (PRD §14) — v1.1 (Phase 4; MASK-04/05 completed after Phase 7)
 - ✓ **Sampling** — `SAMPLING_RATE` + always-on for errors / slow requests (PRD §15) — v1.1 (Phase 4)
 - ✓ **Dashboard access control** — staff-only by default, optional IP allowlist (PRD §14) — v1.1 (Phase 4)
 - ✓ **Async-safe buffers** — replace `threading.local` with `ContextVar` in SQL log + event buffer — v1.1 (Phase 4)

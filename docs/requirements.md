@@ -48,10 +48,8 @@ Requirements for the v1.1 milestone: close PRD Phase 1 watchers (Cache, Template
 - [x] **MASK-01**: A configurable `SENSITIVE_KEYS` list redacts matching keys (case-insensitive) in request headers, request body, response headers, response body, cookies, query params, and exception locals
 - [x] **MASK-02**: Default `SENSITIVE_KEYS` includes: `password`, `passwd`, `token`, `secret`, `authorization`, `cookie`, `set-cookie`, `csrfmiddlewaretoken`, `api_key`, `api-key`, `x-api-key`, `access_token`, `refresh_token`, `session`, `sessionid`
 - [x] **MASK-03**: Redaction replaces values with `"***REDACTED***"`; keys remain visible
-- [ ] **MASK-04**: A regex-based value matcher catches credit-card-shaped (Luhn-valid 13–19 digits) and JWT-shaped strings regardless of key
-  - ⚠ Partial (Phase 4): Card matcher is shape-only; Luhn validation not implemented.
-- [ ] **MASK-05**: Masking is applied **before** `buffer_event` so unmasked data never reaches the DB
-  - ⚠ Partial (Phase 4): If `mask_metadata` raises, `BaseWatcher.record()` falls back to buffering the **unmasked** event.
+- [x] **MASK-04**: A regex-based value matcher catches credit-card-shaped (Luhn-valid 13–19 digits) and JWT-shaped strings regardless of key — Luhn check added after Phase 7 (`fix/masking-fail-closed-luhn`)
+- [x] **MASK-05**: Masking is applied **before** `buffer_event` so unmasked data never reaches the DB — fails closed since `fix/masking-fail-closed-luhn`: if masking raises, a `{"masking_failed": true, "error_type": …}` placeholder is stored instead
 - [x] **MASK-06**: Nested dicts and lists in metadata are walked recursively (with depth cap to prevent runaway)
 
 ### Sampling (PRD §15)
@@ -149,7 +147,7 @@ Update the status when a spec for that phase ships. Specs and plans in `docs/sup
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | ASYNC-01, ASYNC-02 | Phase 4 (Safety & Hardening) | Done |
-| MASK-01..06 | Phase 4 (Safety & Hardening) | Done — MASK-04, MASK-05 partial |
+| MASK-01..06 | Phase 4 (Safety & Hardening) | Done — MASK-04/05 completed after Phase 7 |
 | SAMP-01..05 | Phase 4 (Safety & Hardening) | Done |
 | AUTH-01..05 | Phase 4 (Safety & Hardening) | Done |
 | IGN-01..04 | Phase 4 (Safety & Hardening) | Done — IGN-04 documented in Phase 7 |
