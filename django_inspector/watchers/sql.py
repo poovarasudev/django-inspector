@@ -7,7 +7,6 @@ Requirements: SQL-01..SQL-07
 
 import logging
 import time
-import traceback
 from contextvars import ContextVar
 
 from django.db import connections
@@ -16,6 +15,7 @@ from django_inspector.conf import inspector_settings
 from django_inspector.tracing.context import get_current_trace_id
 from django_inspector.watchers.base import BaseWatcher
 from django_inspector.watchers.registry import register
+from django_inspector.watchers.utils import extract_origin
 
 logger = logging.getLogger("django_inspector")
 
@@ -113,7 +113,7 @@ def _query_wrapper(execute, sql, params, many, context):
     db_alias = getattr(connection, "alias", "default") if connection else "default"
 
     # SQL-04: Origin file and line
-    origin = _extract_origin()
+    origin = extract_origin()
 
     # SQL-05: Slow query flag
     slow_threshold = inspector_settings.SQL_SLOW_THRESHOLD_MS
@@ -167,38 +167,6 @@ def _is_inspector_query(sql: str) -> bool:
     """Check if a query is from django-inspector itself (avoid recursion)."""
     sql_lower = sql.lower().strip()
     return "django_inspector_event" in sql_lower
-
-
-def _extract_origin() -> dict:
-    """
-    Walk the call stack to find the application code that triggered the query.
-    Skips django internals and django-inspector's own frames.
-    """
-    skip_patterns = (
-        "django_inspector",
-        "django/db",
-        "django/core",
-        "django/utils",
-        "django/test",
-    )
-    for frame_info in reversed(traceback.extract_stack()):
-        filename = frame_info.filename
-        # Skip Python internals, Django internals, and our own code
-        if any(pat in filename for pat in skip_patterns):
-            continue
-        if "site-packages" in filename:
-            continue
-        if "<" in filename:  # <frozen>, <string>, etc.
-            continue
-        # Skip standard library modules
-        if "/lib/python" in filename and "/tests/" not in filename:
-            continue
-        return {
-            "file": filename,
-            "line": frame_info.lineno,
-            "function": frame_info.name,
-        }
-    return {"file": None, "line": None, "function": None}
 
 
 def _safe_params(params) -> list | str | None:

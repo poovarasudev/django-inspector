@@ -57,6 +57,10 @@ class DjangoInspectorConfig(AppConfig):
             import django_inspector.watchers.exception  # noqa: F401
         except ImportError:
             pass
+        try:
+            import django_inspector.watchers.cache  # noqa: F401
+        except ImportError:
+            pass
 
         for name, watcher_class in registry.all_watchers().items():
             watcher = watcher_class()

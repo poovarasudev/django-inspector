@@ -6,6 +6,7 @@ DEFAULTS = {
         "request": True,
         "sql": True,
         "exception": True,
+        "cache": False,     # CACHE-07: opt in with {"WATCHERS": {"cache": True}}
     },
     "DASHBOARD_URL_PREFIX": "inspector/",  # must match where the host mounts django_inspector.dashboard.urls; requests under it are never traced
     "SQL_SLOW_THRESHOLD_MS": 100,
