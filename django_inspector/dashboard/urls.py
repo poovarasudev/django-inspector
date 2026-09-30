@@ -17,4 +17,8 @@ urlpatterns = [
     path("cache/<int:pk>/", inspector_required(views.cache_detail), name="cache-detail"),
     path("templates/", inspector_required(views.templates_list), name="templates-list"),
     path("templates/<int:pk>/", inspector_required(views.template_detail), name="template-detail"),
+    path("logs/", inspector_required(views.logs_list), name="logs-list"),
+    path("logs/<int:pk>/", inspector_required(views.log_detail), name="log-detail"),
+    path("signals/", inspector_required(views.signals_list), name="signals-list"),
+    path("signals/<int:pk>/", inspector_required(views.signal_detail), name="signal-detail"),
 ]

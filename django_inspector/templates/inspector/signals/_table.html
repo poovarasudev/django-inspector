@@ -1,0 +1,29 @@
+<table class="inspector-table">
+    <thead>
+        <tr>
+            <th>Signal</th>
+            <th>Sender</th>
+            <th>Receivers</th>
+            <th>Duration</th>
+            <th>Time</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for event in page.object_list %}
+        <tr>
+            <td>
+                <a href="{% url 'inspector:signal-detail' event.pk %}" class="inspector-code-inline">{{ event.metadata.signal }}</a>
+                {% if event.metadata.error %}<span class="inspector-indicator inspector-indicator--slow">ERROR</span>{% endif %}
+            </td>
+            <td class="inspector-code-inline">{{ event.metadata.sender|default:"-" }}</td>
+            <td>{{ event.metadata.receiver_count }}</td>
+            <td>{{ event.metadata.duration_ms }}ms</td>
+            <td>{{ event.timestamp|timesince }} ago</td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="5" style="text-align: center; padding: 40px; color: var(--ins-text-secondary);">No signal dispatches found.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

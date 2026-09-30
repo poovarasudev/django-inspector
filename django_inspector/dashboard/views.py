@@ -2,10 +2,12 @@ from django.conf import settings
 from django.shortcuts import render, get_object_or_404
 from django.core.paginator import Paginator
 
+from django_inspector.conf import inspector_settings
 from django_inspector.storage.models import Event
 from django_inspector.watchers.cache import CACHE_EVENT_TYPES
 
 CACHE_OPERATIONS = [event_type.split(".", 1)[1] for event_type in CACHE_EVENT_TYPES]
+LOG_LEVELS = [(10, "DEBUG"), (20, "INFO"), (30, "WARNING"), (40, "ERROR"), (50, "CRITICAL")]
 
 
 def live_feed(request):
@@ -300,3 +302,76 @@ def _cache_hits_and_misses(cache_events):
             hits += meta.get("hit_count") or 0
             misses += meta.get("miss_count") or 0
     return hits, misses
+
+
+def logs_list(request):
+    qs = Event.objects.filter(event_type="log.record").order_by("-timestamp")
+
+    level = request.GET.get("level", "")
+    logger_name = request.GET.get("logger", "")
+    message = request.GET.get("message", "")
+
+    if level.isdigit():
+        qs = qs.filter(metadata__level__gte=int(level))
+    if logger_name:
+        qs = qs.filter(metadata__logger__icontains=logger_name)
+    if message:
+        qs = qs.filter(metadata__message__icontains=message)
+
+    paginator = Paginator(qs, 25)
+    page = paginator.get_page(request.GET.get("page", 1))
+    context = {"page": page, "filters": request.GET, "levels": LOG_LEVELS}
+
+    if request.headers.get("HX-Request"):
+        return render(request, "inspector/logs/_table.html", context)
+    return render(request, "inspector/logs/list.html", context)
+
+
+def log_detail(request, pk):
+    event = get_object_or_404(Event, pk=pk, event_type="log.record")
+    context = {"event": event, "parent_request": _parent_request(event)}
+    return render(request, "inspector/logs/detail.html", context)
+
+
+def signals_list(request):
+    qs = Event.objects.filter(event_type="signal.dispatched").order_by("-timestamp")
+
+    signal = request.GET.get("signal", "")
+    sender = request.GET.get("sender", "")
+
+    if signal:
+        qs = qs.filter(metadata__signal=signal)
+    if sender:
+        qs = qs.filter(metadata__sender__icontains=sender)
+
+    paginator = Paginator(qs, 25)
+    page = paginator.get_page(request.GET.get("page", 1))
+    context = {
+        "page": page,
+        "filters": request.GET,
+        "signals": list(inspector_settings.SIGNAL_WATCH_LIST or []),
+    }
+
+    if request.headers.get("HX-Request"):
+        return render(request, "inspector/signals/_table.html", context)
+    return render(request, "inspector/signals/list.html", context)
+
+
+def signal_detail(request, pk):
+    event = get_object_or_404(Event, pk=pk, event_type="signal.dispatched")
+    receivers = event.metadata.get("receivers") or []
+    not_run = max(0, (event.metadata.get("receiver_count") or 0) - len(receivers))
+    context = {
+        "event": event,
+        "receivers": receivers,
+        "not_run": not_run,
+        "parent_request": _parent_request(event),
+    }
+    return render(request, "inspector/signals/detail.html", context)
+
+
+def _parent_request(event):
+    """The request.completed event of the trace this event belongs to, if any."""
+    return Event.objects.filter(
+        trace_id=event.trace_id, event_type="request.completed"
+    ).first()

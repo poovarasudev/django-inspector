@@ -1,4 +1,6 @@
-"""Tests for the dashboard's cache and template pages and the request detail page."""
+"""Tests for the dashboard's cache, template, log and signal pages and the request detail page."""
+
+import logging
 
 import pytest
 from django.contrib.auth.models import User
@@ -214,3 +216,137 @@ class TestRequestDetailIntegration(DashboardTestCase):
         body = self.body("request-detail", self.request_event.pk, params={"view": "waterfall"})
         assert "inspector-waterfall-bar--cache" in body
         assert "inspector-waterfall-bar--template" in body
+
+
+def log_event(level_name, message, logger_name="shop.checkout", **extra):
+    data = {
+        "logger": logger_name,
+        "level": getattr(logging, level_name),
+        "level_name": level_name,
+        "message": message,
+        "file": "/app/shop/checkout.py",
+        "line": 42,
+        "function": "place_order",
+    }
+    data.update(extra)
+    return Event.objects.create(trace_id=TRACE, event_type="log.record", metadata=data)
+
+
+def signal_event(signal, sender, receivers, **extra):
+    data = {
+        "signal": signal,
+        "sender": sender,
+        "receiver_count": len(receivers),
+        "receivers": receivers,
+        "duration_ms": 2.5,
+        "method": "send",
+    }
+    data.update(extra)
+    return Event.objects.create(trace_id=TRACE, event_type="signal.dispatched", metadata=data)
+
+
+class TestLogPages(DashboardTestCase):
+    def setUp(self):
+        self.warning = log_event("WARNING", "stock running low", logger_name="shop.inventory")
+        self.error = log_event(
+            "ERROR", "payment declined", exception_type="PaymentError",
+            traceback="Traceback (most recent call last):\n  File x\nPaymentError: card declined",
+        )
+        self.critical = log_event("CRITICAL", "database unreachable", logger_name="db.pool")
+
+    def test_list_shows_log_records(self):
+        body = self.body("logs-list")
+        for message in ("stock running low", "payment declined", "database unreachable"):
+            assert message in body
+
+    def test_filter_by_minimum_level(self):
+        body = self.body("logs-list", params={"level": "40"})
+        assert "payment declined" in body
+        assert "database unreachable" in body
+        assert "stock running low" not in body
+
+    def test_filter_by_logger(self):
+        body = self.body("logs-list", params={"logger": "SHOP"})
+        assert "stock running low" in body
+        assert "database unreachable" not in body
+
+    def test_filter_by_message(self):
+        body = self.body("logs-list", params={"message": "payment"})
+        assert "payment declined" in body
+        assert "stock running low" not in body
+
+    def test_htmx_request_returns_table_partial(self):
+        body = self.body("logs-list", htmx=True)
+        assert "<table" in body
+        assert "inspector-sidebar" not in body
+
+    def test_detail_shows_traceback_source_and_request_link(self):
+        request_event = Event.objects.create(
+            trace_id=TRACE, event_type="request.completed",
+            metadata={"method": "POST", "path": "/checkout/", "status_code": 500},
+        )
+        body = self.body("log-detail", self.error.pk)
+        assert "PaymentError: card declined" in body
+        assert "/app/shop/checkout.py" in body
+        assert "place_order" in body
+        assert reverse("inspector:request-detail", args=[request_event.pk]) in body
+
+    def test_detail_404s_for_non_log_event(self):
+        other = cache_event("get", key="k", hit=True)
+        with pytest.raises(Http404):
+            self.get("log-detail", other.pk)
+
+    def test_sidebar_links_to_logs(self):
+        assert reverse("inspector:logs-list") in self.body("live-feed")
+
+
+class TestSignalPages(DashboardTestCase):
+    def setUp(self):
+        self.saved = signal_event(
+            "django.db.models.signals.post_save", "shop.models.Order",
+            [
+                {"receiver": "shop.receivers.notify_warehouse", "duration_ms": 1.2},
+                {"receiver": "shop.receivers.bust_cache", "duration_ms": 0.3, "error": "KeyError: missing"},
+            ],
+        )
+        self.deleted = signal_event(
+            "django.db.models.signals.post_delete", "shop.models.Coupon",
+            [{"receiver": "shop.receivers.audit", "duration_ms": 0.1}],
+        )
+
+    def test_list_shows_dispatches(self):
+        body = self.body("signals-list")
+        assert "shop.models.Order" in body
+        assert "shop.models.Coupon" in body
+
+    def test_filter_by_signal(self):
+        body = self.body("signals-list", params={"signal": "django.db.models.signals.post_delete"})
+        assert "shop.models.Coupon" in body
+        assert "shop.models.Order" not in body
+
+    def test_filter_by_sender(self):
+        body = self.body("signals-list", params={"sender": "order"})
+        assert "shop.models.Order" in body
+        assert "shop.models.Coupon" not in body
+
+    def test_htmx_request_returns_table_partial(self):
+        body = self.body("signals-list", htmx=True)
+        assert "<table" in body
+        assert "inspector-sidebar" not in body
+
+    def test_detail_lists_receivers_in_call_order_with_errors(self):
+        body = self.body("signal-detail", self.saved.pk)
+        assert body.index("shop.receivers.notify_warehouse") < body.index("shop.receivers.bust_cache")
+        assert "KeyError: missing" in body
+
+    def test_detail_notes_receivers_that_did_not_run(self):
+        halted = signal_event(
+            "django.db.models.signals.pre_save", "shop.models.Order",
+            [{"receiver": "shop.receivers.validate", "duration_ms": 0.2, "error": "ValueError: bad"}],
+            receiver_count=3, error="ValueError: bad",
+        )
+        body = self.body("signal-detail", halted.pk)
+        assert "2 receivers did not run" in body
+
+    def test_sidebar_links_to_signals(self):
+        assert reverse("inspector:signals-list") in self.body("live-feed")
