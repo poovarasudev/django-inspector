@@ -36,6 +36,9 @@ classifiers = [
     "Topic :: System :: Monitoring",
 ]
 
+[project.entry-points.pytest11]
+django_inspector = "django_inspector.testing.pytest_plugin"
+
 [project.urls]
 Homepage = "https://github.com/poovarasudev/django-inspector"
 Changelog = "https://github.com/poovarasudev/django-inspector/blob/master/CHANGELOG.md"
