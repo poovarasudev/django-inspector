@@ -20,7 +20,6 @@ from django.dispatch import Signal
 from django.utils.module_loading import import_string
 
 from django_inspector.conf import inspector_settings
-from django_inspector.tracing.context import get_current_trace_id
 from django_inspector.watchers.base import BaseWatcher
 from django_inspector.watchers.registry import register
 from django_inspector.watchers.utils import elapsed_ms
@@ -156,7 +155,7 @@ def _make_dispatch(watcher, name, signal, method, original):
     if method.startswith("a"):
 
         async def dispatch_async(sender, **named):
-            if get_current_trace_id() is None:
+            if not watcher.is_capturing():
                 return await original(sender, **named)
             dispatch = _Dispatch(signal)
             token = _current_dispatch.set(dispatch)
@@ -177,7 +176,7 @@ def _make_dispatch(watcher, name, signal, method, original):
         return dispatch_async
 
     def dispatch_sync(sender, **named):
-        if get_current_trace_id() is None:
+        if not watcher.is_capturing():
             return original(sender, **named)
         dispatch = _Dispatch(signal)
         token = _current_dispatch.set(dispatch)

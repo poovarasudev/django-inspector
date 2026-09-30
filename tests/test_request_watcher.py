@@ -113,17 +113,6 @@ class TestRequestWatcher(TestCase):
         # No authenticated user on this request
         assert meta["user"] is None
 
-    @override_settings(DJANGO_INSPECTOR={"INSPECTOR_ENABLED": True, "DASHBOARD_URL_PREFIX": "inspector/"})
-    def test_excludes_inspector_requests(self):
-        """REQ-06: Inspector's own requests are excluded."""
-        request = self.factory.get("/inspector/feed/")
-        response = HttpResponse("ok")
-        self.watcher.on_request(request)
-        self.watcher.on_response(request, response)
-
-        buffer = _get_buffer()
-        assert len(buffer) == 0
-
     @override_settings(DJANGO_INSPECTOR={"TRUSTED_PROXY_COUNT": 1})
     def test_x_forwarded_for_ip_behind_a_trusted_proxy(self):
         """REQ-05: X-Forwarded-For is used only for TRUSTED_PROXY_COUNT hops."""

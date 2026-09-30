@@ -30,7 +30,7 @@ class RequestWatcher(BaseWatcher):
     - Request/response body with size truncation (REQ-03)
     - Status code and response latency (REQ-04)
     - Authenticated user, session ID, client IP (REQ-05)
-    - Excludes inspector's own requests (REQ-06)
+    - Excludes inspector's own requests (REQ-06; the middleware skips dashboard paths)
     """
 
     watcher_name = "request"
@@ -43,12 +43,6 @@ class RequestWatcher(BaseWatcher):
         """No-op — paired with install_hooks."""
         pass
 
-    def should_ignore_request(self, request) -> bool:
-        """Return True if this request should not be recorded (REQ-06)."""
-        from django_inspector.ignores import is_dashboard_path
-
-        return is_dashboard_path(getattr(request, "path", ""))
-
     def on_request(self, request):
         """Called by middleware at start of request. Stores start time."""
         request._inspector_start_time = time.monotonic()
@@ -59,9 +53,6 @@ class RequestWatcher(BaseWatcher):
         Called by middleware after response is generated.
         Records the full request/response event.
         """
-        if self.should_ignore_request(request):
-            return
-
         latency_ms = None
         start_time = getattr(request, "_inspector_start_time", None)
         if start_time is not None:

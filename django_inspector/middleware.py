@@ -4,7 +4,12 @@ import logging
 from asgiref.sync import sync_to_async
 
 from django_inspector.conf import inspector_settings
-from django_inspector.sampling import compute_sampling_decision, set_sampled
+from django_inspector.sampling import (
+    compute_sampling_decision,
+    early_pick,
+    reset_detail,
+    start_detail,
+)
 from django_inspector.tracing.context import (
     clear_trace_id,
     generate_trace_id,
@@ -68,16 +73,15 @@ class InspectorMiddleware:
         trace_id = generate_trace_id()
         token = set_trace_id(trace_id)
         request.inspector_trace_id = trace_id
-        set_sampled(True)
-        state_tokens = self._start_request_state()
+        pick = early_pick()
+        state_tokens = self._start_request_state(pick)
 
         self._notify_request_start(request)
 
         try:
             response = self.get_response(request)
             self._notify_request_end(request, response)
-            sampled = compute_sampling_decision(request, response)
-            set_sampled(sampled)
+            sampled = compute_sampling_decision(request, response, pick)
             request.inspector_sampled = sampled
             if not sampled:
                 from django_inspector.storage.flush import clear_buffer
@@ -107,16 +111,15 @@ class InspectorMiddleware:
         trace_id = generate_trace_id()
         token = set_trace_id(trace_id)
         request.inspector_trace_id = trace_id
-        set_sampled(True)
-        state_tokens = self._start_request_state()
+        pick = early_pick()
+        state_tokens = self._start_request_state(pick)
 
         self._notify_request_start(request)
 
         try:
             response = await self.get_response(request)
             await sync_to_async(self._notify_request_end)(request, response)
-            sampled = compute_sampling_decision(request, response)
-            set_sampled(sampled)
+            sampled = compute_sampling_decision(request, response, pick)
             request.inspector_sampled = sampled
             if not sampled:
                 from django_inspector.storage.flush import clear_buffer
@@ -131,23 +134,25 @@ class InspectorMiddleware:
         return response
 
     @staticmethod
-    def _start_request_state():
+    def _start_request_state(pick=None):
         """
         Fresh per-request event buffer and SQL query log. Without this, requests
         whose context inherits a buffer share one list, and one request's flush
-        can clear another's events mid-flight.
+        can clear another's events mid-flight. Also records whether detailed
+        watchers capture (False when early sampling didn't pick the request).
         """
         from django_inspector.storage.flush import start_buffer
         from django_inspector.watchers.sql import start_query_log
 
-        return start_buffer(), start_query_log()
+        return start_buffer(), start_query_log(), start_detail(pick is not False)
 
     @staticmethod
     def _reset_request_state(tokens):
         from django_inspector.storage.flush import reset_buffer
         from django_inspector.watchers.sql import reset_query_log
 
-        buffer_token, query_log_token = tokens
+        buffer_token, query_log_token, detail_token = tokens
+        reset_detail(detail_token)
         reset_query_log(query_log_token)
         reset_buffer(buffer_token)
 

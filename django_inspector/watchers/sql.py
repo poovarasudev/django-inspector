@@ -16,6 +16,7 @@ from typing import Tuple, Union
 from django.db import connections
 
 from django_inspector.conf import inspector_settings
+from django_inspector.sampling import detail_enabled
 from django_inspector.tracing.context import get_current_trace_id
 from django_inspector.watchers.base import BaseWatcher
 from django_inspector.watchers import registry
@@ -145,7 +146,7 @@ def _query_wrapper(execute, sql, params, many, context):
     and metadata, then delegates to the original executor.
     """
     trace_id = get_current_trace_id()
-    if trace_id is None or not inspector_settings.is_enabled:
+    if trace_id is None or not inspector_settings.is_enabled or not detail_enabled():
         return execute(sql, params, many, context)
 
     # Check if this is an inspector query (avoid recording our own queries)

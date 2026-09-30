@@ -9,7 +9,7 @@ import time
 import pytest
 from django.test import TestCase, override_settings
 
-from django_inspector.sampling import compute_sampling_decision, is_sampled, set_sampled
+from django_inspector.sampling import compute_sampling_decision, detail_enabled
 from django_inspector.storage.models import Event
 
 
@@ -56,15 +56,69 @@ class TestComputeSamplingDecision:
         assert compute_sampling_decision(req, MockResponse(200)) is False
 
 
-class TestSampledContextVar:
-    def test_default_is_true(self):
-        set_sampled(True)
-        assert is_sampled() is True
+class TestEarlyPickDecision:
+    @override_settings(DJANGO_INSPECTOR={"SAMPLING_RATE": 0.0})
+    def test_early_pick_keeps_the_request(self):
+        assert compute_sampling_decision(MockRequest(), MockResponse(200), early_pick=True) is True
 
-    def test_set_false(self):
-        set_sampled(False)
-        assert is_sampled() is False
-        set_sampled(True)
+    @override_settings(DJANGO_INSPECTOR={"SAMPLING_RATE": 0.99})
+    def test_early_reject_drops_a_fast_success_whatever_the_rate(self):
+        assert compute_sampling_decision(MockRequest(), MockResponse(200), early_pick=False) is False
+
+    @override_settings(DJANGO_INSPECTOR={"SAMPLING_RATE": 0.0})
+    def test_early_reject_still_keeps_errors(self):
+        assert compute_sampling_decision(MockRequest(), MockResponse(500), early_pick=False) is True
+
+
+def test_detail_is_enabled_outside_requests():
+    assert detail_enabled() is True
+
+
+@pytest.mark.django_db
+class TestEarlySampling(TestCase):
+    """EARLY_SAMPLING: requests not picked at the start skip detailed capture."""
+
+    def _run(self, view, rate, pick):
+        from unittest import mock
+
+        from django.test import RequestFactory
+
+        from django_inspector.middleware import InspectorMiddleware
+
+        Event.objects.all().delete()
+        settings = {"SAMPLING_RATE": rate, "EARLY_SAMPLING": True}
+        with override_settings(DJANGO_INSPECTOR=settings), \
+                mock.patch("django_inspector.sampling.random.random", return_value=pick):
+            InspectorMiddleware(view)(RequestFactory().get("/early/"))
+        return sorted(Event.objects.values_list("event_type", flat=True))
+
+    @staticmethod
+    def _querying_view(status=200):
+        from django.db import connection
+        from django.http import HttpResponse
+
+        def view(request):
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+            return HttpResponse("ok", status=status)
+
+        return view
+
+    def test_unpicked_success_records_nothing_and_skips_sql_work(self):
+        from unittest import mock
+
+        with mock.patch("django_inspector.watchers.sql.extract_origin") as origin:
+            events = self._run(self._querying_view(), rate=0.5, pick=0.9)
+        assert events == []
+        origin.assert_not_called()
+
+    def test_unpicked_error_keeps_the_request_but_not_the_detail(self):
+        events = self._run(self._querying_view(status=500), rate=0.5, pick=0.9)
+        assert events == ["request.completed"]
+
+    def test_picked_request_is_captured_in_full(self):
+        events = self._run(self._querying_view(), rate=0.5, pick=0.1)
+        assert events == ["request.completed", "sql.query"]
 
 
 @pytest.mark.django_db

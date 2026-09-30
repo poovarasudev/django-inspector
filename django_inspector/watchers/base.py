@@ -12,6 +12,7 @@ import abc
 import logging
 
 from django_inspector.conf import inspector_settings
+from django_inspector.sampling import LIGHT_WATCHERS, detail_enabled
 from django_inspector.tracing.context import get_current_trace_id
 
 logger = logging.getLogger("django_inspector")
@@ -58,6 +59,15 @@ class BaseWatcher(abc.ABC):
         self._enabled = False
         logger.debug("django-inspector: %s watcher disabled", self.watcher_name)
 
+    def is_capturing(self) -> bool:
+        """
+        Cheap check for hooks to call before doing any work: enabled, inside a
+        trace, and (for detailed watchers) picked by early sampling.
+        """
+        if not self._enabled or get_current_trace_id() is None:
+            return False
+        return self.watcher_name in LIGHT_WATCHERS or detail_enabled()
+
     def record(self, event_type: str, metadata: dict, timestamp=None) -> None:
         """
         Buffer a watcher event for the current request trace.
@@ -77,6 +87,9 @@ class BaseWatcher(abc.ABC):
         trace_id = get_current_trace_id()
         if trace_id is None:
             return
+
+        if self.watcher_name not in LIGHT_WATCHERS and not detail_enabled():
+            return  # early sampling didn't pick this request
 
         from django_inspector.masking import mask_metadata
         from django_inspector.storage.flush import buffer_event

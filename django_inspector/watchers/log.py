@@ -13,7 +13,6 @@ import logging
 from contextvars import ContextVar
 
 from django_inspector.conf import inspector_settings
-from django_inspector.tracing.context import get_current_trace_id
 from django_inspector.watchers.base import BaseWatcher
 from django_inspector.watchers.registry import register
 
@@ -67,7 +66,7 @@ class InspectorLogHandler(logging.Handler):
         self.watcher = watcher
 
     def emit(self, record):
-        if _emitting.get() or get_current_trace_id() is None:
+        if _emitting.get() or not self.watcher.is_capturing():
             return
         if record.name == _INSPECTOR_LOGGER or record.name.startswith(_INSPECTOR_LOGGER + "."):
             return

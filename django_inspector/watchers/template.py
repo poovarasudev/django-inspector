@@ -98,9 +98,9 @@ class TemplateWatcher(BaseWatcher):
 def _make_render_wrapper(watcher, original):
     @functools.wraps(original)
     def wrapper(template, context):
-        trace_id = get_current_trace_id()
-        if trace_id is None:
+        if not watcher.is_capturing():
             return original(template, context)
+        trace_id = get_current_trace_id()
 
         try:
             state = _state_for(trace_id)

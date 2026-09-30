@@ -20,7 +20,6 @@ from django.core.cache.backends.base import DEFAULT_TIMEOUT
 from django.utils.module_loading import import_string
 
 from django_inspector.conf import inspector_settings
-from django_inspector.tracing.context import get_current_trace_id
 from django_inspector.watchers.base import BaseWatcher
 from django_inspector.watchers.registry import register
 from django_inspector.watchers.utils import elapsed_ms, extract_origin
@@ -123,7 +122,7 @@ class CacheWatcher(BaseWatcher):
 def _make_wrapper(watcher, operation, original):
     @functools.wraps(original)
     def wrapper(cache, *args, **kwargs):
-        if _in_cache_op.get() or get_current_trace_id() is None:
+        if _in_cache_op.get() or not watcher.is_capturing():
             return original(cache, *args, **kwargs)
 
         try:

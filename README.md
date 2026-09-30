@@ -111,6 +111,7 @@ DJANGO_INSPECTOR = {
 | `MAX_EVENTS_PER_TRACE` | `1000` | Most events stored per request. Later ones are dropped and counted in the request's `events_dropped`; the request event itself is always kept. `0` means no limit. |
 | `SENSITIVE_KEYS` | `[]` | Extra keys to redact, added to the built-in list (password, token, secret, api_key, authorization, cookie, csrf, session, …). |
 | `SAMPLING_RATE` | `1.0` | Fraction of successful requests to keep (0.0–1.0). 5xx responses are always kept. |
+| `EARLY_SAMPLING` | `False` | Decide sampling when a request starts instead of when it ends. Requests that aren't picked then skip SQL, cache, template, signal and log capture entirely (much cheaper), but a failed or slow one is still kept with its request and exception events. |
 | `SLOW_REQUEST_THRESHOLD_MS` | `1000` | Requests at or above this latency are always kept, whatever the sampling rate. |
 | `INSPECTOR_DASHBOARD_PERMISSION` | `None` | Dotted path to a `(request) -> bool` callable. `None` means the user must be `is_staff`. |
 | `INSPECTOR_DASHBOARD_IP_ALLOWLIST` | `[]` | IP addresses or CIDR ranges allowed to see the dashboard. Empty means no IP restriction. |
@@ -146,7 +147,7 @@ The dashboard has these pages:
 ## Production notes
 
 - **Masking.** Before an event is stored, keys matching the sensitive list are redacted anywhere in it. Values holding a Luhn-valid card number or a JWT are also redacted, whatever their key. Masking fails closed: if it ever raises, the event is stored as a `masking_failed` placeholder instead of the original data. Form and JSON bodies (request and response) are parsed and masked before they are stored, and `@sensitive_post_parameters` is honoured. Multipart bodies are only summarised when your view parsed them, binary bodies are stored as a size summary, and the recorded full URL has its sensitive query parameters masked.
-- **Sampling.** Use `SAMPLING_RATE` to limit how much is stored. Errors and slow requests are always kept, so the interesting ones survive.
+- **Sampling.** Use `SAMPLING_RATE` to limit how much is stored. Errors and slow requests are always kept, so the interesting ones survive. By default every request is captured and the unpicked ones are discarded at the end; set `EARLY_SAMPLING = True` to also skip the capture work for them (their errors and slow requests keep only the request and exception events).
 - **Retention.** Events accumulate until you delete them. Schedule the cleanup command, for example hourly from cron:
 
   ```bash

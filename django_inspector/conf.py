@@ -19,6 +19,7 @@ DEFAULTS = {
     "MAX_EVENTS_PER_TRACE": 1000,       # events kept per request; later ones are counted as events_dropped (0 = no limit)
     "SENSITIVE_KEYS": [],               # extra keys to redact (merged additive with built-in defaults in masking.py)
     "SAMPLING_RATE": 1.0,               # fraction of successful requests to capture (0.0–1.0); errors always captured
+    "EARLY_SAMPLING": False,            # decide sampling when a request starts, so unpicked requests skip detailed capture
     "SLOW_REQUEST_THRESHOLD_MS": 1000,  # requests at or above this latency are always captured regardless of rate
     "INSPECTOR_DASHBOARD_PERMISSION": None,  # dotted path to (request) -> bool callable; None = require is_staff
     "INSPECTOR_DASHBOARD_IP_ALLOWLIST": [],  # list of IP address or CIDR strings; empty = no IP restriction
