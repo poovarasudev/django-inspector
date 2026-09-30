@@ -199,6 +199,7 @@ Work items:
 **Goal**: Each chosen management command run becomes a trace with its SQL, logs and exceptions.
 **Depends on**: Phase 9
 **Requirements**: CMD-01..03 (CMD-04 shipped in Phase 9)
+**Spec**: [2026-09-30-command-watcher-design.md](superpowers/specs/2026-09-30-command-watcher-design.md)
 **Success Criteria** (what must be TRUE):
   1. Running a command listed in `COMMAND_WATCH_LIST` produces a trace with a `command.completed` event (name, args, options, bounded stdout/stderr, duration, exit code) and its SQL/log/exception events.
   2. Unlisted commands, and `runserver`, `test`, `shell`, `migrate` and `inspector_cleanup` even when listed, record nothing.
