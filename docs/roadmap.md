@@ -243,9 +243,9 @@ Work items:
   4. Dashboard lists export to CSV, masked like the JSON export.
 
 Work items:
-- [ ] Aggregates (exceptions, query shapes, endpoints)
-- [ ] Issues page
-- [ ] CSV export
+- [x] Aggregates (exceptions, query shapes, endpoints)
+- [x] Issues page
+- [x] CSV export
 
 ---
 
@@ -312,7 +312,7 @@ Work items:
 | 9. Trace API | v1.2 | 1/1 | Complete | 2026-09-30 |
 | 10. Management Command Watcher | v1.2 | 1/1 | Complete | 2026-09-30 |
 | 11. Query Guard for Tests | v1.2 | 1/1 | Complete | 2026-09-30 |
-| 12. Issues Page & CSV Export | v1.2 | 0/1 | Planned | - |
+| 12. Issues Page & CSV Export | v1.2 | 1/1 | Complete | 2026-09-30 |
 | 13. Email Watcher | v1.2 | 0/1 | Planned | - |
 | 14. HTTP Client Watcher | v1.3 | 0/1 | Planned | - |
 | 15. Celery Watcher | v1.3 | 0/1 | Planned | - |

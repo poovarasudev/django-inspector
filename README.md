@@ -283,14 +283,28 @@ The allowlist checks `REMOTE_ADDR` unless you set `TRUSTED_PROXY_COUNT` to the n
 When both are set, the request must pass both. When `DEBUG = False` and neither is set, the system check `django_inspector.W008` warns you: in production, staff status alone is often not the protection you want.
 
 The dashboard has these pages:
+- **Issues**: see [The Issues page](#the-issues-page) below.
 - **Live Feed**
 - **Requests**: each request has a timeline, tabs and a waterfall view of everything in its trace.
 - **Traces**: `trace()` runs and traced commands — name, status, duration — each with a timeline and waterfall on its own `/trace/<id>/` page (a command's page also shows its exit code, args, options and captured output), filterable by type. A request's trace id also resolves there and redirects to its request page.
-- **Queries**, **Cache**, **Templates**, **Logs**, **Signals** and **Exceptions**: each page has filters.
+- **Queries**, **Cache**, **Templates**, **Logs**, **Signals** and **Exceptions**: each page has filters and an "Export CSV" link — see [CSV export](#csv-export) below.
 
 ### Pinning a trace
 
 A request's detail page has a "Pin trace" button next to its trace id. Pinning sets a flag on every event of that trace, which keeps it out of `RETENTION_HOURS` pruning and `inspector_cleanup` — useful for holding on to a specific bug report while everything else keeps expiring. Pinned requests show a "Pinned" badge in the requests list too; "Unpin trace" clears the flag.
+
+### The Issues page
+
+`/issues/` answers "what should I fix first?" with three tables, each linking to example traces:
+- **Exceptions**, grouped by fingerprint (type plus the innermost application frame) — count, affected traces, first/last seen.
+- **Query shapes**, grouped by normalised SQL — count, affected traces, p50/p95 duration, and how many traces hit an N+1; N+1 shapes sort to the top.
+- **Endpoints**, grouped by `(method, route)` (the URL pattern, not the raw path, so `/orders/1/` and `/orders/2/` count as one) — p50/p95 duration, error rate and client-error rate.
+
+A `?window=` query parameter picks `1h`, `24h` (the default) or `7d`; an unrecognised value falls back to `24h`. Each section scans at most its newest 10,000 matching events, however big the table gets, and says so ("Based on the latest 10,000 …") when that cuts the window short. With `SAMPLING_RATE` below 1, a notice marks the counts as relative, not totals — they aren't scaled to compensate. The page is a snapshot: no live polling.
+
+### CSV export
+
+Every dashboard list exports to CSV: `?format=csv` on a list URL streams the current filtered queryset (timestamp, trace id, event type, duration, plus that list's own fields) as `text/csv`, capped at 10,000 rows. A cell starting with `=`, `+`, `-`, `@`, a tab or a carriage return is prefixed with `'` so a spreadsheet doesn't treat it as a formula. The data comes straight from stored, already-masked metadata.
 
 ## Production notes
 
