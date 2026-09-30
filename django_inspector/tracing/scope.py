@@ -44,11 +44,15 @@ class TraceScope:
         self._detail_token: Optional[object] = None
 
     @classmethod
-    def start(cls, trace_id: Optional[str] = None) -> "TraceScope":
+    def start(cls, trace_id: Optional[str] = None, chunk_size: Optional[int] = None) -> "TraceScope":
         """
         Begin a trace: generate an id when none is given, and start a fresh
         event buffer, query stats and early-sampling detail flag. Keeps
         every token so close() can restore the context precisely.
+
+        ``chunk_size`` makes the event buffer flush itself every that many
+        events instead of holding everything until the trace ends (used by
+        long-running command traces; see storage/flush.py's _EventBuffer).
         """
         from django_inspector.sampling import early_pick, start_detail
         from django_inspector.storage.flush import start_buffer
@@ -57,7 +61,7 @@ class TraceScope:
         pick = early_pick()
         scope = cls(trace_id or generate_trace_id(), pick)
         scope._trace_token = set_trace_id(scope.trace_id)
-        scope._buffer_token = start_buffer()
+        scope._buffer_token = start_buffer(chunk_size=chunk_size)
         scope._query_log_token = start_query_log()
         scope._detail_token = start_detail(pick is not False)
         return scope
@@ -71,7 +75,13 @@ class TraceScope:
         them instead), prune old events, and clear the query log. Each step
         is independently guarded: a failure there is logged and swallowed,
         or raised under INSPECTOR_RAISE_ERRORS, and never stops the others.
+
+        ``keep`` is overridden by the buffer's own ``force_keep``: once a
+        chunk has already been written to the database, discarding the rest
+        would leave a half-written trace behind.
         """
+        from django_inspector.storage.flush import _get_buffer
+        keep = keep or _get_buffer().force_keep
         if not keep:
             try:
                 from django_inspector.storage.flush import clear_buffer

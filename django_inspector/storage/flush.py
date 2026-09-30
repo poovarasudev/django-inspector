@@ -14,33 +14,53 @@ from django_inspector.storage.columns import derive_columns
 logger = logging.getLogger("django_inspector")
 
 # Anchor events are always kept, even past MAX_EVENTS_PER_TRACE: request.completed
-# carries the dropped-event count, and trace.completed is trace()'s own anchor.
-_NEVER_DROPPED = frozenset({"request.completed", "trace.completed"})
+# and trace.completed carry the dropped-event count, and command.completed is
+# the command watcher's own anchor.
+_NEVER_DROPPED = frozenset({"request.completed", "trace.completed", "command.completed"})
 
 
 class _EventBuffer(list):
-    """A request's buffered events, plus how many were dropped past the limit."""
+    """
+    A request's buffered events, plus how many were dropped past the limit.
 
-    def __init__(self):
+    ``chunk_size`` (None = never chunk) lets a long-running trace (a
+    management command) flush its buffer in chunks instead of holding
+    everything in memory until the end: ``written`` counts events already
+    flushed this way, and ``force_keep`` is set once a chunk has actually
+    reached the database, so discarding the rest at the end (sampling said no)
+    would leave a half-written trace.
+    """
+
+    def __init__(self, chunk_size=None):
         super().__init__()
         self.dropped = 0
+        self.written = 0
+        self.chunk_size = chunk_size
+        self.force_keep = False
 
     def clear(self):
         super().clear()
         self.dropped = 0
+        self.written = 0
+        self.force_keep = False
+
+    def mark_written(self):
+        """Drop the already-flushed items, keeping ``dropped`` and counting ``written``."""
+        self.written += len(self)
+        del self[:]
 
 
 _buffer_var: ContextVar = ContextVar("inspector_event_buffer", default=None)
 
 
-def start_buffer():
+def start_buffer(chunk_size=None):
     """
     Give the current request its own event buffer. Returns a token for
     reset_buffer(). Called by the middleware at the start of every request so
     a buffer inherited from the parent context (e.g. an ASGI server's) is never
     shared between concurrent requests.
     """
-    return _buffer_var.set(_EventBuffer())
+    return _buffer_var.set(_EventBuffer(chunk_size=chunk_size))
 
 
 def reset_buffer(token) -> None:
@@ -69,7 +89,7 @@ def buffer_event(trace_id: str, event_type: str, metadata: dict, timestamp=None)
         return
     buf = _get_buffer()
     limit = inspector_settings.MAX_EVENTS_PER_TRACE
-    if limit and len(buf) >= limit and event_type not in _NEVER_DROPPED:
+    if limit and (len(buf) + buf.written) >= limit and event_type not in _NEVER_DROPPED:
         buf.dropped += 1
         return
     buf.append(
@@ -80,6 +100,15 @@ def buffer_event(trace_id: str, event_type: str, metadata: dict, timestamp=None)
             "timestamp": timestamp or timezone.now(),
         }
     )
+    if buf.chunk_size and len(buf) >= buf.chunk_size:
+        try:
+            flush_events()
+        except Exception:
+            if inspector_settings.INSPECTOR_RAISE_ERRORS:
+                raise
+            logger.warning("inspector: chunked flush failed; retrying at the final flush", exc_info=True)
+        else:
+            buf.force_keep = True
 
 
 def dropped_count() -> int:
@@ -128,7 +157,7 @@ def flush_events() -> int:
 
     Event.objects.bulk_create(events)
     count = len(events)
-    buffer.clear()
+    buffer.mark_written()
     return count
 
 
