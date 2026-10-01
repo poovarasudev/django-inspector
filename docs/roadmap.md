@@ -288,6 +288,7 @@ Work items:
 **Goal**: Every task run is a trace, linked to the request that sent it.
 **Depends on**: Phases 8, 9
 **Requirements**: CELERY-01..05
+**Spec**: [2026-09-30-celery-watcher-design.md](superpowers/specs/2026-09-30-celery-watcher-design.md)
 **Success Criteria** (what must be TRUE):
   1. A task sent from a view carries the view's trace id; the worker records the task as its own trace with `parent_trace_id` set.
   2. The task trace has the CELERY-03 fields, with args and kwargs masked.
