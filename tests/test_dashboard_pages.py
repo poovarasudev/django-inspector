@@ -620,6 +620,66 @@ class TestRequestDetailHttp(DashboardTestCase):
         assert "inspector-waterfall-bar--http" in body
 
 
+def task_sent_event(task="app.tasks.add", task_id="task-1", queue="celery", trace_id=TRACE, **extra):
+    data = {"task": task, "task_id": task_id, "queue": queue, "exchange": "", "eta": None, "retries": 0}
+    data.update(extra)
+    return Event.objects.create(trace_id=trace_id, event_type="task.sent", metadata=data)
+
+
+def task_completed_event(task_id, task="app.tasks.add", state="SUCCESS", status="ok",
+                         parent_trace_id=None, trace_id=None, **extra):
+    trace_id = trace_id or ("t" + task_id).ljust(32, "0")[:32]
+    data = {
+        "name": task, "task": task, "task_id": task_id, "state": state,
+        "duration_ms": 5.0, "status": status, "error_type": None,
+        "retries": 0, "worker": "worker1", "queue": "celery", "eta": None,
+        "args": [], "kwargs": {},
+    }
+    data.update(extra)
+    return Event.objects.create(
+        trace_id=trace_id, event_type="task.completed", metadata=data,
+        duration_ms=data.get("duration_ms"), parent_trace_id=parent_trace_id,
+    )
+
+
+class TestRequestDetailTasks(DashboardTestCase):
+    def setUp(self):
+        self.request_event = Event.objects.create(
+            trace_id=TRACE, event_type="request.completed",
+            metadata={"method": "POST", "path": "/orders/", "status_code": 200, "latency_ms": 20.0},
+        )
+
+    def test_summary_counts_tasks_sent(self):
+        import re
+
+        task_sent_event()
+        body = self.body("request-detail", self.request_event.pk)
+        assert re.search(r'__value">1</div>\s*<div class="inspector-summary-card__label">Tasks Sent', body)
+
+    def test_timeline_labels_task_sent_events(self):
+        task_sent_event(task="app.tasks.send_email")
+        body = self.body("request-detail", self.request_event.pk)
+        assert "inspector-timeline-item--task" in body
+        assert "app.tasks.send_email" in body
+
+    def test_tabs_view_links_to_the_task_trace_when_one_exists(self):
+        task_sent_event(task="app.tasks.add", task_id="task-1")
+        task_completed_event("task-1", trace_id="e" * 32, parent_trace_id=TRACE)
+        body = self.body("request-detail", self.request_event.pk, params={"view": "tabs"})
+        assert "Tasks (1)" in body
+        assert reverse("inspector:trace-detail", args=["e" * 32]) in body
+
+    def test_tabs_view_shows_not_run_yet_without_a_matching_task_trace(self):
+        task_sent_event(task="app.tasks.add", task_id="task-missing")
+        body = self.body("request-detail", self.request_event.pk, params={"view": "tabs"})
+        assert "not run yet, or not kept" in body
+
+    def test_waterfall_colours_task_sent_bars(self):
+        task_sent_event()
+        body = self.body("request-detail", self.request_event.pk, params={"view": "waterfall"})
+        assert "inspector-waterfall-bar--task" in body
+
+
 class TestSidebarVersion(DashboardTestCase):
     def test_sidebar_shows_the_package_version(self):
         from django_inspector import __version__

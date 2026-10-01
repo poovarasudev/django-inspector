@@ -43,9 +43,8 @@ ISSUES_WINDOWS = {
 }
 ISSUES_DEFAULT_WINDOW = "24h"
 
-# Event types that anchor a non-request trace on /trace/<id>/ and the Traces
-# list. Phase 15 adds task.completed.
-TRACE_ANCHOR_TYPES = ("trace.completed", "command.completed")
+# Event types that anchor a non-request trace on /trace/<id>/ and the Traces list.
+TRACE_ANCHOR_TYPES = ("trace.completed", "command.completed", "task.completed")
 
 _ASSET_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
 _ASSET_TYPES = {
@@ -207,6 +206,7 @@ def request_detail(request, pk):
     signal_dispatches = [e for e in trace_events if e.event_type == "signal.dispatched"]
     mail_events = [e for e in trace_events if e.event_type == "mail.sent"]
     http_events = [e for e in trace_events if e.event_type == "http.request"]
+    tasks_sent = _resolve_sent_tasks(event.trace_id, trace_events)
 
     total_query_time = sum(e.metadata.get("duration_ms", 0) for e in queries)
     slow_queries = sum(1 for e in queries if e.metadata.get("is_slow"))
@@ -230,6 +230,7 @@ def request_detail(request, pk):
         "signal_dispatches": len(signal_dispatches),
         "mail_sent": len(mail_events),
         "http_calls": len(http_events),
+        "tasks_sent": len(tasks_sent),
     }
 
     waterfall_events = _waterfall(trace_events, event)
@@ -253,6 +254,7 @@ def request_detail(request, pk):
         "signal_dispatches": signal_dispatches,
         "mail_events": mail_events,
         "http_events": http_events,
+        "tasks_sent": tasks_sent,
         "trace_truncated": trace_truncated,
         "max_detail_events": MAX_DETAIL_EVENTS,
     }
@@ -287,6 +289,10 @@ def trace_detail(request, trace_id):
     anchor = next((e for e in trace_events if e.event_type in TRACE_ANCHOR_TYPES), None)
     waterfall_events = _waterfall(trace_events, anchor) if anchor is not None else []
 
+    parent_stored = None
+    if anchor is not None and anchor.event_type == "task.completed" and anchor.parent_trace_id:
+        parent_stored = Event.objects.filter(trace_id=anchor.parent_trace_id).exists()
+
     context = {
         "trace_id": trace_id,
         "anchor": anchor,
@@ -296,11 +302,13 @@ def trace_detail(request, trace_id):
         "waterfall_events": waterfall_events,
         "cache_event_types": CACHE_EVENT_TYPES,
         "pinned": trace_events[0].pinned,
+        "parent_stored": parent_stored,
+        "tasks_sent": _resolve_sent_tasks(trace_id, trace_events),
     }
     return render(request, "inspector/traces/detail.html", context)
 
 
-_TRACE_TYPE_FILTERS = {"trace": "trace.completed", "command": "command.completed"}
+_TRACE_TYPE_FILTERS = {"trace": "trace.completed", "command": "command.completed", "task": "task.completed"}
 
 
 def traces_list(request):
@@ -685,6 +693,27 @@ def signal_detail(request, pk):
         "parent_request": _parent_request(event),
     }
     return render(request, "inspector/signals/detail.html", context)
+
+
+def _resolve_sent_tasks(trace_id, trace_events):
+    """
+    Pairs each task.sent event in ``trace_events`` with the task trace it
+    started, if one exists: a single query for this trace's task.completed
+    anchors (parent_trace_id=trace_id), matched on metadata.task_id in
+    Python. A task.sent event with no match either hasn't run yet, or its
+    trace wasn't kept by sampling.
+    """
+    sent_events = [e for e in trace_events if e.event_type == "task.sent"]
+    if not sent_events:
+        return []
+    by_task_id = {
+        e.metadata.get("task_id"): e
+        for e in Event.objects.filter(event_type="task.completed", parent_trace_id=trace_id)
+    }
+    return [
+        {"event": e, "task_trace": by_task_id.get(e.metadata.get("task_id"))}
+        for e in sent_events
+    ]
 
 
 def _parent_request(event):

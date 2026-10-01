@@ -54,6 +54,30 @@ def command_trace_event(trace_id, name="backfill", status="ok", when=None, **met
     )
 
 
+def task_trace_event(trace_id, task="app.tasks.add", state="SUCCESS", status="ok",
+                     parent_trace_id=None, when=None, **metadata):
+    data = {
+        "name": task, "task": task, "task_id": trace_id, "state": state,
+        "duration_ms": 5.0, "status": status, "error_type": None,
+        "retries": 0, "worker": "worker1", "queue": "celery", "eta": None,
+        "args": [], "kwargs": {},
+    }
+    data.update(metadata)
+    return Event.objects.create(
+        trace_id=trace_id, event_type="task.completed", metadata=data,
+        duration_ms=data.get("duration_ms"), parent_trace_id=parent_trace_id,
+        timestamp=when or timezone.now(),
+    )
+
+
+def task_sent_event(trace_id, task="app.tasks.add", task_id="task-id-1", queue="celery", when=None, **metadata):
+    data = {"task": task, "task_id": task_id, "queue": queue, "exchange": "", "eta": None, "retries": 0}
+    data.update(metadata)
+    return Event.objects.create(
+        trace_id=trace_id, event_type="task.sent", metadata=data, timestamp=when or timezone.now(),
+    )
+
+
 class DashboardClient(TestCase):
     def get(self, url_name, *args, params=None, user=None):
         path = reverse("inspector:" + url_name, args=args)
@@ -294,6 +318,78 @@ class TestTracesListTypeFilter(DashboardClient):
         body = self.body("traces-list", params={"type": "command"})
         assert "backfill" in body
         assert "nightly-report" not in body
+
+    def test_lists_task_traces_and_filters_by_type_task(self):
+        trace_event("c" * 32, "nightly-report")
+        task_trace_event("e" * 32, task="app.tasks.add")
+        body = self.body("traces-list")
+        assert "app.tasks.add" in body
+        body = self.body("traces-list", params={"type": "task"})
+        assert "app.tasks.add" in body
+        assert "nightly-report" not in body
+
+
+class TestTaskTracePage(DashboardClient):
+    def test_renders_the_task_section_with_its_fields(self):
+        trace_id = "e" * 32
+        task_trace_event(
+            trace_id, task="app.tasks.add", state="SUCCESS",
+            retries=1, worker="worker1", queue="celery",
+            args=[1, 2], kwargs={"x": "y"}, result="3",
+        )
+        body = self.body("trace-detail", trace_id)
+        assert "app.tasks.add" in body
+        assert "SUCCESS" in body
+        assert "worker1" in body
+        assert "celery" in body
+
+    def test_sent_by_links_to_the_parent_trace_when_stored(self):
+        parent_trace_id = "f" * 32
+        trace_event(parent_trace_id, "nightly-report")
+        trace_id = "e" * 32
+        task_trace_event(trace_id, parent_trace_id=parent_trace_id)
+        body = self.body("trace-detail", trace_id)
+        assert reverse("inspector:trace-detail", args=[parent_trace_id]) in body
+
+    def test_sent_by_shows_not_stored_when_the_parent_trace_is_missing(self):
+        trace_id = "e" * 32
+        task_trace_event(trace_id, parent_trace_id="f" * 32)
+        body = self.body("trace-detail", trace_id)
+        assert "not stored" in body
+        assert reverse("inspector:trace-detail", args=["f" * 32]) not in body
+
+    def test_failure_shows_the_exception_field(self):
+        trace_id = "e" * 32
+        task_trace_event(
+            trace_id, state="FAILURE", status="error",
+            exception="builtins.ValueError: boom",
+        )
+        body = self.body("trace-detail", trace_id)
+        assert "builtins.ValueError: boom" in body
+
+    def test_task_traces_appear_on_the_generic_trace_page(self):
+        trace_id = "e" * 32
+        task_trace_event(trace_id)
+        response = self.get("trace-detail", trace_id)
+        assert response.status_code == 200
+
+
+class TestTraceTasksSent(DashboardClient):
+    def test_lists_tasks_sent_from_a_non_request_trace(self):
+        trace_id = "c" * 32
+        trace_event(trace_id, "nightly-report")
+        task_sent_event(trace_id, task="app.tasks.add", task_id="linked-task")
+        task_trace_event("e" * 32, task="app.tasks.add", parent_trace_id=trace_id, **{"task_id": "linked-task"})
+        body = self.body("trace-detail", trace_id)
+        assert "Tasks sent" in body
+        assert reverse("inspector:trace-detail", args=["e" * 32]) in body
+
+    def test_shows_not_run_yet_when_no_task_trace_matches(self):
+        trace_id = "c" * 32
+        trace_event(trace_id, "nightly-report")
+        task_sent_event(trace_id, task="app.tasks.add", task_id="unmatched-task")
+        body = self.body("trace-detail", trace_id)
+        assert "not run yet, or not kept" in body
 
 
 class TestIssuesPageAccessAndCost(DashboardClient):
