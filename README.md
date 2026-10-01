@@ -77,6 +77,7 @@ Each watcher can be turned on or off under `WATCHERS`. The noisier ones are off 
 | Command | `"command"` | on | commands listed in `COMMAND_WATCH_LIST`: name, args, options, bounded stdout/stderr, duration, exit code — see [Tracing management commands](#tracing-management-commands) |
 | Mail | `"mail"` | off | recipients, subject, text/HTML bodies (up to 64K characters each), headers, backend, attachment filenames/types/sizes (never contents), outcome — see [Viewing sent mail](#viewing-sent-mail) |
 | HTTP | `"http"` | on | outgoing `requests`/`httpx` calls (sync and async): method, masked URL, host, status, duration, redirects, response size, error — see [Outgoing HTTP calls](#outgoing-http-calls) |
+| Celery | `"celery"` | on | every task sent and run: task name, masked args/kwargs, queue, ETA, retries, worker, result or exception — see [Celery tasks](#celery-tasks) |
 
 ```python
 DJANGO_INSPECTOR = {
@@ -186,6 +187,22 @@ One `http.request` event per `send()` call: library, method, masked URL and host
 **URL masking.** Query parameters whose names match the sensitive-key rules are replaced with `***REDACTED***`, userinfo (`user:pass@`) is dropped, and the whole URL is then run through the same JWT/card-number scan as any other value — so a token in the path is caught too. The masked URL is what's stored, shown and exported; nothing unmasked ever reaches the dashboard.
 
 The HTTP page (`/http/`) lists calls with host/status-class/"errors only" filters and CSV export; its detail page shows every field, the origin, and a link back to the parent request or trace. The Issues page's **Slow hosts** section (below) ranks hosts by p95 latency.
+
+## Celery tasks
+
+The Celery watcher is **on by default** and does nothing when Celery isn't installed — there's no setup beyond having both `django_inspector` and your Celery app configured. It connects five Celery signals (`before_task_publish`, `task_prerun`, `task_failure`, `task_retry`, `task_postrun`); it never patches Celery's own classes, and `celery` is never imported until the watcher enables.
+
+**Linked, not nested, traces.** A task is sent before the sender's keep/drop sampling decision is made, so nesting its events inside the sender's trace would orphan them if that trace were dropped. Instead:
+- The trace that calls `.delay()`/`.apply_async()` records a `task.sent` event (task name, queue, ETA, retries) and the task's message carries that trace's id in an `inspector_trace_id` header.
+- The worker gives the task's own run its own trace, anchored by a `task.completed` event whose `parent_trace_id` points back to the sender. Each is **sampled independently** with `SAMPLING_RATE` (failures and slow runs are always kept) — a task's trace can be kept while its sender's wasn't, or vice versa; the dashboard says so when a link points at a trace that isn't stored.
+
+**What's captured** on `task.completed`: task name, task id, state (`SUCCESS`, `FAILURE`, or `RETRY` while retrying), retries, worker hostname, queue, ETA, masked and bounded args/kwargs, a masked result `repr()` (success only, capped at 500 characters) or a masked `"Type: message"` exception — plus the task's own SQL, log and exception events, exactly like a request. A genuine failure also produces an `exception.raised` event in the task's trace; a retry does not.
+
+**Eager mode.** With `task_always_eager`, the task runs inline on the sender's thread — it joins the sender's trace instead of starting its own, and its `task.completed` anchor lands there (no separate `parent_trace_id` link needed, since it's the same trace).
+
+**The `[celery]` extra** (`django-inspector[celery]`) pins `celery>=5.2` for documentation purposes only — the watcher's code never imports Celery until it enables, so it's never a hard dependency.
+
+The Traces page lists task traces alongside `trace()` runs and commands (filterable by type); a task's page shows its state, retries, worker, queue, args/kwargs, result/exception and a "Sent by" link to the sender's trace. A request's or trace's own detail page lists the tasks it sent under a **Tasks** tab/section, each linking to its task trace when one was kept.
 
 ## Catching N+1 queries in tests
 
@@ -318,7 +335,7 @@ The dashboard has these pages:
 - **Issues**: see [The Issues page](#the-issues-page) below.
 - **Live Feed**
 - **Requests**: each request has a timeline, tabs and a waterfall view of everything in its trace.
-- **Traces**: `trace()` runs and traced commands — name, status, duration — each with a timeline and waterfall on its own `/trace/<id>/` page (a command's page also shows its exit code, args, options and captured output), filterable by type. A request's trace id also resolves there and redirects to its request page.
+- **Traces**: `trace()` runs, traced commands and Celery task runs — name, status, duration — each with a timeline and waterfall on its own `/trace/<id>/` page (a command's page also shows its exit code, args, options and captured output; a task's page shows its state, retries, worker, queue, args/kwargs, result/exception and a "Sent by" link), filterable by type. A request's trace id also resolves there and redirects to its request page.
 - **Queries**, **Cache**, **Templates**, **Mail**, **HTTP**, **Logs**, **Signals** and **Exceptions**: each page has filters and an "Export CSV" link — see [CSV export](#csv-export) below. Mail's detail page also has an HTML preview and a "Download .eml" button — see [Viewing sent mail](#viewing-sent-mail) above.
 
 ### Pinning a trace

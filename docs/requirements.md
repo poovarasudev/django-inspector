@@ -143,11 +143,11 @@ From the product discovery in `docs/discovery/2026-09-30-next-features.md`. Phas
 
 ### Celery Watcher (PRD §11.12) — Phase 15
 
-- [ ] **CELERY-01**: A task sent during a trace carries that trace's id in its message headers
-- [ ] **CELERY-02**: Each task run is its own trace, linked to the sending trace through `parent_trace_id`
-- [ ] **CELERY-03**: Capture task name, masked args and kwargs, queue, ETA, retries, worker, result state, exception, duration
-- [ ] **CELERY-04**: Celery is imported lazily and offered as an optional extra, never a runtime dependency
-- [ ] **CELERY-05**: The trace page links a request to the tasks it sent, and a task back to its request
+- [x] **CELERY-01**: A task sent during a trace carries that trace's id in its message headers
+- [x] **CELERY-02**: Each task run is its own trace, linked to the sending trace through `parent_trace_id`
+- [x] **CELERY-03**: Capture task name, masked args and kwargs, queue, ETA, retries, worker, result state, exception, duration
+- [x] **CELERY-04**: Celery is imported lazily and offered as an optional extra, never a runtime dependency
+- [x] **CELERY-05**: The trace page links a request to the tasks it sent, and a task back to its request
 
 ## v2 (Deferred) Requirements
 
@@ -219,7 +219,7 @@ Update the status when a spec for that phase ships. Specs and plans in `docs/sup
 | DASH-03, DASH-04 | Phase 12 (Issues Page & CSV Export) | Done |
 | MAIL-01..03 | Phase 13 (Email Watcher) | Done |
 | HTTP-01..03 | Phase 14 (HTTP Client Watcher) | Done |
-| CELERY-01..05 | Phase 15 (Celery Watcher) | Planned |
+| CELERY-01..05 | Phase 15 (Celery Watcher) | Done |
 
 **Coverage:**
 - v1.1 requirements: **53** total (Cache 7 + Template 5 + Signal 6 + Logging 6 + Mask 6 + Samp 5 + Auth 5 + Async 3 + Ignore 4 + Obs 3 + ASYNC-03 already counted)

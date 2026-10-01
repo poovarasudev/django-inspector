@@ -37,6 +37,8 @@
 - ✓ Dashboard: Logs and Signals pages; request detail shows log/signal events — v1.1 (Phase 6)
 - ✓ **Native ASGI** — async-capable middleware; every v1.1 watcher verified under concurrent ASGI requests and WSGI (ASYNC-03) — v1.1 (Phase 7)
 - ✓ **Releasable package** — Python 3.8+ imports fixed, templates packaged, MIT license, version 0.2.0, README, CHANGELOG, CI — v1.1 (Phase 7)
+- ✓ **HTTP client watcher** — `requests`/`httpx` (sync and async) calls: method, masked URL, host, status, duration, redirects, response size, error; lazily imported, never a dependency (PRD §11.14) — v1.3 (Phase 14)
+- ✓ **Celery watcher** — signals only (no class patching); a sent task carries its trace id in message headers (`task.sent`), the worker gives the task its own trace anchored by `task.completed` with `parent_trace_id` back to the sender, sampled independently; lazily imported, never a dependency (PRD §11.12) — v1.3 (Phase 15)
 
 ### Active
 
