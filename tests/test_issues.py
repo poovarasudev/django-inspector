@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from django_inspector.dashboard import issues
-from django_inspector.dashboard.issues import endpoint_stats, exception_groups, query_shape_groups
+from django_inspector.dashboard.issues import endpoint_stats, exception_groups, http_host_stats, query_shape_groups
 from django_inspector.storage.columns import exception_fingerprint, normalize_sql, sql_fingerprint
 from django_inspector.storage.models import Event
 
@@ -58,6 +58,26 @@ def request_event(method="GET", path="/x/", route=None, status_code=200, duratio
     return Event.objects.create(
         trace_id=trace_id, event_type="request.completed", metadata=metadata,
         method=method, path=path, status_code=status_code, duration_ms=duration_ms,
+        timestamp=when or timezone.now(),
+    )
+
+
+def http_event(host="api.example.com", status_code=200, duration_ms=10.0, error=None,
+                trace_id=None, when=None, **extra):
+    trace_id = trace_id or _tid(1)
+    url = "https://%s/x" % host
+    metadata = {
+        "library": "requests", "method": "GET", "url": url, "host": host,
+        "status_code": status_code, "duration_ms": duration_ms, "redirects": 0,
+        "response_bytes": 10, "streamed": False,
+    }
+    if error is not None:
+        metadata["error"] = error
+    metadata.update(extra)
+    return Event.objects.create(
+        trace_id=trace_id, event_type="http.request", metadata=metadata,
+        method=metadata["method"], status_code=metadata.get("status_code"),
+        path=url, duration_ms=duration_ms,
         timestamp=when or timezone.now(),
     )
 
@@ -277,6 +297,73 @@ class TestEndpointStats(TestCase):
         issues.ISSUES_SCAN_LIMIT = 3
         try:
             stats, capped = endpoint_stats(_since())
+        finally:
+            issues.ISSUES_SCAN_LIMIT = original
+        assert capped is True
+        assert sum(r["count"] for r in stats) == 3
+
+
+class TestHttpHostStats(TestCase):
+    def test_groups_by_host_with_percentiles(self):
+        for i, d in enumerate([100, 200, 300, 400]):
+            http_event(host="api.example.com", duration_ms=d, trace_id=_tid(i))
+
+        stats, capped = http_host_stats(_since())
+        assert capped is False
+        assert len(stats) == 1
+        row = stats[0]
+        assert row["host"] == "api.example.com"
+        assert row["count"] == 4
+        assert row["p50"] == 200
+        assert row["p95"] == 400
+
+    def test_error_rate_counts_errors_and_5xx(self):
+        http_event(host="api.example.com", status_code=200, trace_id=_tid(1))
+        http_event(host="api.example.com", status_code=500, trace_id=_tid(2))
+        http_event(host="api.example.com", status_code=200, error="ConnectionError: boom", trace_id=_tid(3))
+        http_event(host="api.example.com", status_code=404, trace_id=_tid(4))
+
+        stats, _ = http_host_stats(_since())
+        assert stats[0]["error_rate"] == 0.5
+
+    def test_orders_by_p95_descending(self):
+        http_event(host="fast.example.com", duration_ms=10, trace_id=_tid(1))
+        http_event(host="slow.example.com", duration_ms=1000, trace_id=_tid(2))
+
+        stats, _ = http_host_stats(_since())
+        assert [r["host"] for r in stats] == ["slow.example.com", "fast.example.com"]
+
+    def test_example_trace_id_is_the_slowest_call(self):
+        http_event(host="api.example.com", duration_ms=10, trace_id=_tid(1))
+        http_event(host="api.example.com", duration_ms=999, trace_id=_tid(2))
+
+        stats, _ = http_host_stats(_since())
+        assert stats[0]["example_trace_id"] == _tid(2)
+
+    def test_different_hosts_are_separate_rows(self):
+        http_event(host="a.example.com", trace_id=_tid(1))
+        http_event(host="b.example.com", trace_id=_tid(2))
+        stats, _ = http_host_stats(_since())
+        assert {r["host"] for r in stats} == {"a.example.com", "b.example.com"}
+
+    def test_window_filter_excludes_older_events(self):
+        old = timezone.now() - datetime.timedelta(hours=2)
+        http_event(when=old)
+        stats, _ = http_host_stats(_since())
+        assert stats == []
+
+    def test_only_http_request_events_are_counted(self):
+        sql_event()
+        stats, _ = http_host_stats(_since())
+        assert stats == []
+
+    def test_scan_cap_bounds_rows_and_sets_the_flag(self):
+        for i in range(5):
+            http_event(trace_id=_tid(i), when=timezone.now() - datetime.timedelta(seconds=i))
+        original = issues.ISSUES_SCAN_LIMIT
+        issues.ISSUES_SCAN_LIMIT = 3
+        try:
+            stats, capped = http_host_stats(_since())
         finally:
             issues.ISSUES_SCAN_LIMIT = original
         assert capped is True

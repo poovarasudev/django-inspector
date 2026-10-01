@@ -185,3 +185,38 @@ def endpoint_stats(since, limit=50) -> Tuple[List[dict], bool]:
 
     results.sort(key=lambda r: r["p95"] if r["p95"] is not None else -1, reverse=True)
     return results[:limit], capped
+
+
+def http_host_stats(since, limit=50) -> Tuple[List[dict], bool]:
+    """Outgoing HTTP calls grouped by host, ranked by p95 latency (HTTP-03)."""
+    qs = Event.objects.filter(event_type="http.request", timestamp__gte=since)
+    bounded, capped = _bounded(qs)
+
+    rows = bounded.values_list(
+        "duration_ms", "trace_id", "metadata__host", "metadata__error", "metadata__status_code"
+    )
+
+    groups = defaultdict(list)
+    for duration_ms, trace_id, host, error, status_code in rows:
+        groups[host or "-"].append((duration_ms, trace_id, error, status_code))
+
+    results = []
+    for host, entries in groups.items():
+        durations = sorted(d for d, _, _, _ in entries if d is not None)
+        count = len(entries)
+        error_count = sum(
+            1 for _, _, error, status_code in entries
+            if error is not None or (status_code is not None and status_code >= 500)
+        )
+        slowest = max(entries, key=lambda e: e[0] if e[0] is not None else -1)
+        results.append({
+            "host": host,
+            "count": count,
+            "p50": _percentile(durations, 50),
+            "p95": _percentile(durations, 95),
+            "error_rate": error_count / count,
+            "example_trace_id": slowest[1],
+        })
+
+    results.sort(key=lambda r: r["p95"] if r["p95"] is not None else -1, reverse=True)
+    return results[:limit], capped
