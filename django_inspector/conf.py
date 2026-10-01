@@ -15,6 +15,7 @@ DEFAULTS: Dict[str, Any] = {
         "log": True,        # records at LOG_LEVEL_THRESHOLD or above
         "command": True,    # CMD-02: inert until COMMAND_WATCH_LIST names a command
         "mail": False,      # MAIL-01: opt in; bodies can hold reset/sign-in tokens
+        "http": True,       # HTTP-01: only the masked URL and metadata are stored
     },
     # Must match where the host mounts django_inspector.dashboard.urls; requests under it are never traced.
     "DASHBOARD_URL_PREFIX": "inspector/",
