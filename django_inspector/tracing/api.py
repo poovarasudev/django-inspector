@@ -88,7 +88,9 @@ def _default_describe(exc_type, exc_value):
     return exc_type is not None, {}
 
 
-def _record_anchor(trace_id, anchor_type, name, duration_ms, failed, error_type, timestamp, extra=None):
+def _record_anchor(
+    trace_id, anchor_type, name, duration_ms, failed, error_type, timestamp, extra=None, parent_trace_id=None,
+):
     from django_inspector.masking import mask_metadata
     from django_inspector.storage.flush import buffer_event, dropped_count
 
@@ -110,6 +112,7 @@ def _record_anchor(trace_id, anchor_type, name, duration_ms, failed, error_type,
     buffer_event(
         trace_id=trace_id, event_type=anchor_type,
         metadata=mask_metadata(metadata), timestamp=timestamp,
+        parent_trace_id=parent_trace_id,
     )
 
 
@@ -129,22 +132,26 @@ class _Run:
       or closes, since the outer trace owns all of that.
     - ``chunk_size``: passed to TraceScope.start(), so a long run's buffer is
       flushed in chunks instead of held until the end.
+    - ``parent_trace_id``: carried only on this run's own anchor event, never
+      on the events inside it (used by the Celery watcher to link a task
+      trace back to the trace that sent it).
     """
 
     __slots__ = (
         "name", "anchor_type", "describe", "record_when_joined", "chunk_size",
-        "scope", "joined_trace_id", "started", "started_at",
+        "parent_trace_id", "scope", "joined_trace_id", "started", "started_at",
     )
 
     def __init__(
         self, name, anchor_type="trace.completed", describe=None,
-        record_when_joined=False, chunk_size=None,
+        record_when_joined=False, chunk_size=None, parent_trace_id=None,
     ):
         self.name = name
         self.anchor_type = anchor_type
         self.describe = describe or _default_describe
         self.record_when_joined = record_when_joined
         self.chunk_size = chunk_size
+        self.parent_trace_id = parent_trace_id
         self.scope: Optional[TraceScope] = None
         self.joined_trace_id: Optional[str] = None
         self.started: Optional[float] = None
@@ -202,7 +209,7 @@ class _Run:
         _guarded(
             lambda: _record_anchor(
                 scope.trace_id, self.anchor_type, self.name, duration_ms, failed, error_type,
-                scope.started_at, extra,
+                scope.started_at, extra, self.parent_trace_id,
             ),
             "trace() failed to record the %s anchor" % self.anchor_type,
             protect=protect,
@@ -222,7 +229,7 @@ class _Run:
         _guarded(
             lambda: _record_anchor(
                 self.joined_trace_id, self.anchor_type, self.name, duration_ms, failed, error_type,
-                self.started_at, extra,
+                self.started_at, extra, self.parent_trace_id,
             ),
             "trace() failed to record the %s anchor" % self.anchor_type,
             protect=protect,
