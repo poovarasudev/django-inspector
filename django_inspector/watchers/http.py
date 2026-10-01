@@ -15,6 +15,7 @@ Requirements: HTTP-01..03
 
 import logging
 import time
+from contextvars import ContextVar
 from urllib.parse import urlsplit
 
 from django_inspector.masking import mask_url, mask_value
@@ -27,6 +28,11 @@ logger = logging.getLogger("django_inspector")
 MAX_URL_LENGTH = 2048  # characters of the masked URL stored per call
 
 _PATCH_MARKER = "_inspector_http_patch"
+
+# requests follows redirects by calling Session.send again for each hop.
+# Only the outermost call is the user's call: inner hops pass straight
+# through, and the outer event counts them in `redirects`.
+_in_requests_send: ContextVar[bool] = ContextVar("inspector_in_requests_send", default=False)
 
 
 class HTTPClientWatcher(BaseWatcher):
@@ -77,9 +83,13 @@ class HTTPClientWatcher(BaseWatcher):
         original = requests.Session.send
 
         def _traced_send(session_self, request, **kwargs):
-            if not self.is_capturing():
+            if _in_requests_send.get() or not self.is_capturing():
                 return original(session_self, request, **kwargs)
-            return _sync_call(self, "requests", original, session_self, request, kwargs)
+            token = _in_requests_send.set(True)
+            try:
+                return _sync_call(self, "requests", original, session_self, request, kwargs)
+            finally:
+                _in_requests_send.reset(token)
 
         setattr(_traced_send, _PATCH_MARKER, True)
         requests.Session.send = _traced_send  # type: ignore[method-assign, assignment]

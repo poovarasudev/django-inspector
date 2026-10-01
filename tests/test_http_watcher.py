@@ -234,6 +234,33 @@ class TestRequestsCapture(HTTPWatcherTestCase):
         session.get("https://api.example.com/x")
         assert http_events()[0]["metadata"]["redirects"] == 2
 
+    def test_a_followed_redirect_is_one_event(self):
+        # requests follows redirects by calling Session.send again for each
+        # hop; only the outer call is the user's call (spec: one event, with
+        # the hops counted in `redirects`).
+        class RedirectingAdapter(BaseAdapter):
+            def send(self, request, **kwargs):
+                if request.url.endswith("/start"):
+                    response = requests_response(
+                        status_code=302, headers={"Location": "https://api.example.com/end"}, url=request.url
+                    )
+                else:
+                    response = requests_response(status_code=200, content=b"ok", url=request.url)
+                response.request = request
+                return response
+
+            def close(self):
+                pass
+
+        session = requests.Session()
+        session.mount("https://", RedirectingAdapter())
+        session.get("https://api.example.com/start")
+
+        [event] = http_events()
+        assert event["metadata"]["url"] == "https://api.example.com/start"
+        assert event["metadata"]["redirects"] == 1
+        assert event["metadata"]["status_code"] == 200
+
     def test_error_is_recorded_and_reraised_unchanged(self):
         exc = requests.exceptions.ConnectionError("connection refused")
         session, _ = session_with_fake_adapter(exc=exc)
