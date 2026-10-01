@@ -13,6 +13,7 @@ import math
 import re
 import sys
 from functools import lru_cache
+from urllib.parse import urlsplit
 
 from django_inspector.watchers.utils import is_library_file
 
@@ -139,6 +140,40 @@ def _sql_query_columns(metadata):
     return {"fingerprint": sql_fingerprint(sql, db_alias)}
 
 
+_URL_UUID_SEGMENT = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+_URL_DIGIT_RUN = re.compile(r"\d+")
+
+
+def _url_path_template(path: str) -> str:
+    """``path`` with UUID-like segments and digit runs replaced by '?', so
+    calls to one endpoint (e.g. /users/1 and /users/2) group together."""
+    templated = _URL_UUID_SEGMENT.sub("?", path)
+    return _URL_DIGIT_RUN.sub("?", templated)
+
+
+def _http_request_columns(metadata):
+    columns = {}
+    method = metadata.get("method")
+    if method is not None:
+        columns["method"] = method
+    status_code = metadata.get("status_code")
+    if status_code is not None:
+        columns["status_code"] = status_code
+    url = metadata.get("url")
+    if url is None:
+        return columns
+    columns["path"] = url
+    try:
+        template = _url_path_template(urlsplit(url).path)
+    except Exception:
+        template = ""
+    digest = _sha1(("%s\n%s\n%s" % ((method or "").upper(), metadata.get("host") or "", template)).encode("utf-8"))
+    columns["fingerprint"] = digest.hexdigest()[:FINGERPRINT_LENGTH]
+    return columns
+
+
 def _exception_raised_columns(metadata):
     columns = {}
     exception_type = metadata.get("exception_type")
@@ -157,6 +192,7 @@ _EXTRACTORS = {
     "request.completed": _request_completed_columns,
     "sql.query": _sql_query_columns,
     "exception.raised": _exception_raised_columns,
+    "http.request": _http_request_columns,
 }
 
 

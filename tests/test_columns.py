@@ -156,6 +156,72 @@ class TestCoercion:
         assert "path" not in columns
 
 
+class TestHttpRequestExtractor:
+    def _metadata(self, **extra):
+        data = {
+            "library": "requests", "method": "GET", "url": "https://api.example.com/users/1",
+            "host": "api.example.com", "status_code": 200, "duration_ms": 12.0,
+        }
+        data.update(extra)
+        return data
+
+    def test_fills_method_status_code_and_path(self):
+        columns = derive_columns("http.request", self._metadata())
+        assert columns["method"] == "GET"
+        assert columns["status_code"] == 200
+        assert columns["path"] == "https://api.example.com/users/1"
+
+    def test_path_is_truncated_to_1024(self):
+        long_url = "https://api.example.com/" + ("x" * 2000)
+        columns = derive_columns("http.request", self._metadata(url=long_url))
+        assert len(columns["path"]) == 1024
+
+    def test_no_url_omits_path_and_fingerprint(self):
+        columns = derive_columns("http.request", {"method": "GET", "status_code": 200})
+        assert "path" not in columns
+        assert "fingerprint" not in columns
+
+    def test_fingerprint_is_16_hex_characters(self):
+        columns = derive_columns("http.request", self._metadata())
+        assert len(columns["fingerprint"]) == 16
+        int(columns["fingerprint"], 16)
+
+    def test_digit_runs_group_together(self):
+        a = derive_columns("http.request", self._metadata(url="https://api.example.com/users/1"))
+        b = derive_columns("http.request", self._metadata(url="https://api.example.com/users/2"))
+        assert a["fingerprint"] == b["fingerprint"]
+
+    def test_uuid_segments_group_together(self):
+        a = derive_columns(
+            "http.request",
+            self._metadata(url="https://api.example.com/orders/550e8400-e29b-41d4-a716-446655440000"),
+        )
+        b = derive_columns(
+            "http.request",
+            self._metadata(url="https://api.example.com/orders/6ba7b810-9dad-11d1-80b4-00c04fd430c8"),
+        )
+        assert a["fingerprint"] == b["fingerprint"]
+
+    def test_different_paths_differ(self):
+        a = derive_columns("http.request", self._metadata(url="https://api.example.com/users/1"))
+        b = derive_columns("http.request", self._metadata(url="https://api.example.com/orders/1"))
+        assert a["fingerprint"] != b["fingerprint"]
+
+    def test_different_hosts_differ(self):
+        a = derive_columns("http.request", self._metadata(url="https://a.example.com/x/1", host="a.example.com"))
+        b = derive_columns("http.request", self._metadata(url="https://b.example.com/x/1", host="b.example.com"))
+        assert a["fingerprint"] != b["fingerprint"]
+
+    def test_different_methods_differ(self):
+        a = derive_columns("http.request", self._metadata(method="GET"))
+        b = derive_columns("http.request", self._metadata(method="POST"))
+        assert a["fingerprint"] != b["fingerprint"]
+
+    def test_duration_ms_is_filled_by_the_generic_step(self):
+        columns = derive_columns("http.request", self._metadata(duration_ms=42.5))
+        assert columns["duration_ms"] == 42.5
+
+
 class TestSqlFingerprint:
     def test_equal_across_literal_values(self):
         a = sql_fingerprint("SELECT * FROM users WHERE id = 1", "default")
