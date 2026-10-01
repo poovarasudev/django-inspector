@@ -51,6 +51,7 @@ WATCHER_MODULES = (
     "django_inspector.watchers.command",
     "django_inspector.watchers.mail",
     "django_inspector.watchers.http",
+    "django_inspector.watchers.celery",
 )
 
 
