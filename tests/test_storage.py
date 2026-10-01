@@ -49,6 +49,22 @@ def test_flush_events_clears_buffer():
 
 
 @pytest.mark.django_db
+def test_flush_events_writes_parent_trace_id():
+    buffer_event("task-trace", "task.completed", {}, parent_trace_id="sender-trace")
+    flush_events()
+    event = Event.objects.get(trace_id="task-trace")
+    assert event.parent_trace_id == "sender-trace"
+
+
+@pytest.mark.django_db
+def test_flush_events_parent_trace_id_defaults_to_none():
+    buffer_event("ccc2", "sql.query", {})
+    flush_events()
+    event = Event.objects.get(trace_id="ccc2")
+    assert event.parent_trace_id is None
+
+
+@pytest.mark.django_db
 def test_event_model_str():
     e = Event(trace_id="abcdef012345" + "0" * 20, event_type="sql.query", metadata={})
     assert "sql.query" in str(e)

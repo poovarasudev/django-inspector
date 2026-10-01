@@ -14,9 +14,9 @@ from django_inspector.storage.columns import derive_columns
 logger = logging.getLogger("django_inspector")
 
 # Anchor events are always kept, even past MAX_EVENTS_PER_TRACE: request.completed
-# and trace.completed carry the dropped-event count, and command.completed is
-# the command watcher's own anchor.
-_NEVER_DROPPED = frozenset({"request.completed", "trace.completed", "command.completed"})
+# and trace.completed carry the dropped-event count, command.completed is the
+# command watcher's own anchor, and task.completed is the Celery watcher's.
+_NEVER_DROPPED = frozenset({"request.completed", "trace.completed", "command.completed", "task.completed"})
 
 
 class _EventBuffer(list):
@@ -77,13 +77,17 @@ def _get_buffer() -> _EventBuffer:
     return buf
 
 
-def buffer_event(trace_id: str, event_type: str, metadata: dict, timestamp=None) -> None:
+def buffer_event(trace_id: str, event_type: str, metadata: dict, timestamp=None, parent_trace_id=None) -> None:
     """
     Add an event to the current request buffer. Called by watchers.
 
     ``timestamp`` defaults to now: events keep the time they were captured,
     not the time they are written. Past MAX_EVENTS_PER_TRACE events are
     counted and dropped.
+
+    ``parent_trace_id`` links this event's trace to the trace that started it
+    (e.g. a Celery task to the request that sent it). Only an anchor event
+    carries it in practice; see tracing/api.py's _Run.
     """
     if not inspector_settings.is_enabled:
         return
@@ -98,6 +102,7 @@ def buffer_event(trace_id: str, event_type: str, metadata: dict, timestamp=None)
             "event_type": event_type,
             "metadata": metadata,
             "timestamp": timestamp or timezone.now(),
+            "parent_trace_id": parent_trace_id,
         }
     )
     if buf.chunk_size and len(buf) >= buf.chunk_size:
@@ -150,6 +155,7 @@ def flush_events() -> int:
             event_type=item["event_type"],
             metadata=item["metadata"],
             timestamp=item.get("timestamp") or timezone.now(),
+            parent_trace_id=item.get("parent_trace_id"),
             **_safe_columns(item),
         )
         for item in buffer
