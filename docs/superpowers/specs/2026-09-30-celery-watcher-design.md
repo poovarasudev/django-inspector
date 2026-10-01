@@ -41,10 +41,10 @@ Alternatives rejected:
 
 ### Sending side (`before_task_publish(sender, headers, body, routing_key, exchange, properties, **kw)`)
 
-- If the watcher isn't capturing (`is_capturing()` is False), it does nothing.
+- If no trace is active, it does nothing.
 - Otherwise:
-  - It sets `headers["inspector_trace_id"] = get_current_trace_id()`.
-  - It records `task.sent` with: `task` (the `sender`, i.e. the task name), `task_id` (`headers["id"]`), `queue`/`routing_key`, `exchange`, `eta`, `countdown` when present, and `retries` (`headers["retries"]`).
+  - It sets `headers["inspector_trace_id"] = get_current_trace_id()`, even when detail sampling skipped this trace, since the task trace is sampled on its own and should still link back.
+  - When the watcher is capturing (`is_capturing()`), it records `task.sent` with: `task` (the `sender`, i.e. the task name), `task_id` (`headers["id"]`), `queue`/`routing_key`, `exchange`, `eta`, `countdown` when present, and `retries` (`headers["retries"]`).
 - Guarded: a failure logs and never blocks publishing.
 
 ### Worker side

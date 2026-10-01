@@ -121,6 +121,35 @@ class TestTaskSent(TestCase):
         assert sent.metadata["eta"] == "2026-10-01T00:00:00"
         assert sent.metadata["retries"] == 2
 
+    def test_the_link_header_is_set_even_when_detail_sampling_skipped_the_sender(self):
+        # The task's trace is sampled on its own, so it should still link back
+        # to a sender whose detailed events weren't captured.
+        from django_inspector.sampling import reset_detail, start_detail
+
+        headers = {"id": "task-s", "eta": None, "retries": 0}
+        with trace("sender-job") as sender_trace_id:
+            token = start_detail(False)
+            try:
+                _on_before_task_publish(
+                    sender="app.tasks.add", headers=headers, body=None,
+                    routing_key="celery", exchange="", properties={},
+                )
+            finally:
+                reset_detail(token)
+        assert headers["inspector_trace_id"] == sender_trace_id
+        assert not Event.objects.filter(event_type="task.sent").exists()
+
+    def test_a_non_json_eta_is_stored_as_a_string(self):
+        import datetime
+
+        eta = datetime.datetime(2026, 10, 1, 12, 0)
+        with trace("sender-job"):
+            _on_before_task_publish(
+                sender="app.tasks.add", headers={"id": "task-e", "eta": eta, "retries": 0},
+                body=None, routing_key="celery", exchange="", properties={},
+            )
+        assert Event.objects.get(event_type="task.sent").metadata["eta"] == str(eta)
+
     def test_sensitive_header_values_are_masked(self):
         headers = {"id": "task-z", "eta": None, "retries": 0}
         with trace("sender-job"):

@@ -20,6 +20,7 @@ Requirements: CELERY-01..05
 """
 
 import logging
+import threading
 from typing import Dict, Optional, Tuple
 
 from django_inspector.tracing.api import _Run
@@ -41,6 +42,7 @@ _JSON_SCALARS = (str, int, float, bool, type(None))
 # pair, which prerun and postrun are, but the dict is read and written by
 # other signal handlers running at other points in that same lifecycle.
 _runs: Dict[str, "_TaskRun"] = {}
+_runs_lock = threading.Lock()  # thread-pool workers store and evict concurrently
 
 
 class _TaskRun:
@@ -117,7 +119,7 @@ def _on_before_task_publish(sender=None, headers=None, body=None, routing_key=No
     from django_inspector.watchers import registry
 
     watcher = registry.get_instance("celery")
-    if watcher is None or not watcher.is_capturing():
+    if watcher is None or not watcher.is_enabled:
         return
     _run_guarded(
         lambda: _record_task_sent(watcher, sender, headers, routing_key, exchange),
@@ -128,16 +130,21 @@ def _on_before_task_publish(sender=None, headers=None, body=None, routing_key=No
 def _record_task_sent(watcher, sender, headers, routing_key, exchange):
     from django_inspector.tracing.context import get_current_trace_id
 
-    if headers is None:
-        headers = {}
-    headers["inspector_trace_id"] = get_current_trace_id()
+    trace_id = get_current_trace_id()
+    if trace_id is None or headers is None:
+        return
+    # The link header goes on even when detail sampling skipped this trace:
+    # the task's own trace is sampled on its own and should still point back.
+    headers["inspector_trace_id"] = trace_id
+    if not watcher.is_capturing():
+        return
 
     metadata = {
         "task": sender,
         "task_id": headers.get("id"),
         "queue": routing_key,
         "exchange": exchange if isinstance(exchange, (str, type(None))) else str(exchange),
-        "eta": headers.get("eta"),
+        "eta": _json_safe(headers.get("eta")),
         "retries": headers.get("retries"),
     }
     watcher.record("task.sent", metadata)
@@ -166,7 +173,7 @@ def _start_task_run(task_id, task, args, kwargs):
         retries=getattr(request, "retries", 0) or 0,
         hostname=getattr(request, "hostname", None),
         queue=_queue_name(request),
-        eta=getattr(request, "eta", None),
+        eta=_json_safe(getattr(request, "eta", None)),
     )
     run = _Run(
         task.name, anchor_type="task.completed",
@@ -180,14 +187,17 @@ def _start_task_run(task_id, task, args, kwargs):
 
 
 def _store_run(task_id, run_data):
-    if task_id not in _runs and len(_runs) >= MAX_OPEN_TASK_RUNS:
-        oldest_id = next(iter(_runs))
-        del _runs[oldest_id]
+    with _runs_lock:
+        evicted = None
+        if task_id not in _runs and len(_runs) >= MAX_OPEN_TASK_RUNS:
+            evicted = next(iter(_runs))
+            del _runs[evicted]
+        _runs[task_id] = run_data
+    if evicted is not None:
         logger.warning(
             "inspector: open task run cap (%d) reached; evicted task %r without finishing its trace",
-            MAX_OPEN_TASK_RUNS, oldest_id,
+            MAX_OPEN_TASK_RUNS, evicted,
         )
-    _runs[task_id] = run_data
 
 
 def _parent_trace_id(request):
@@ -292,6 +302,11 @@ def _is_json_friendly(value) -> bool:
     if isinstance(value, dict):
         return all(isinstance(k, str) and _is_json_friendly(v) for k, v in value.items())
     return False
+
+
+def _json_safe(value):
+    """``value`` as is when JSON can store it, else its str() (an eta can be a datetime)."""
+    return value if _is_json_friendly(value) else str(value)
 
 
 def _bounded_args(args) -> list:
