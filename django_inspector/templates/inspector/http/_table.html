@@ -1,0 +1,39 @@
+<table class="inspector-table">
+    <thead>
+        <tr>
+            <th>Method</th>
+            <th>Host</th>
+            <th>Path</th>
+            <th>Status</th>
+            <th>Duration</th>
+            <th>Time</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for event in page.object_list %}
+        <tr>
+            <td>
+                <a href="{% url 'inspector:http-detail' event.pk %}">
+                    <span class="inspector-method-badge inspector-method-badge--{{ event.metadata.method|lower }}">{{ event.metadata.method }}</span>
+                </a>
+            </td>
+            <td class="inspector-code-inline">{{ event.metadata.host|default:"-" }}</td>
+            <td><a href="{% url 'inspector:http-detail' event.pk %}">{{ event.metadata.url|truncatechars:80 }}</a></td>
+            <td>
+                {% if event.metadata.error %}<span class="inspector-indicator inspector-indicator--slow">ERROR</span>
+                {% else %}
+                {% with sc=event.metadata.status_code %}
+                <span class="inspector-badge {% if sc >= 200 and sc < 300 %}inspector-badge--2xx{% elif sc >= 300 and sc < 400 %}inspector-badge--3xx{% elif sc >= 400 and sc < 500 %}inspector-badge--4xx{% elif sc >= 500 %}inspector-badge--5xx{% endif %}">{{ sc }}</span>
+                {% endwith %}
+                {% endif %}
+            </td>
+            <td>{{ event.metadata.duration_ms }}ms</td>
+            <td>{{ event.timestamp|timesince }} ago</td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="6" style="text-align: center; padding: 40px; color: var(--ins-text-secondary);">No HTTP calls found.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

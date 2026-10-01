@@ -681,3 +681,26 @@ class TestMailListAndDetailAccess(DashboardClient):
     def test_detail_requires_access(self):
         event = mail_event()
         assert self.get("mail-detail", event.pk, user=AnonymousUser()).status_code == 403
+
+
+def http_event(trace_id=TRACE, **metadata):
+    data = {
+        "library": "requests", "method": "GET", "url": "https://api.example.com/x",
+        "host": "api.example.com", "status_code": 200, "duration_ms": 15.0,
+        "redirects": 0, "response_bytes": 10, "streamed": False,
+    }
+    data.update(metadata)
+    return Event.objects.create(
+        trace_id=trace_id, event_type="http.request", metadata=data,
+        method=data["method"], status_code=data.get("status_code"),
+        path=data["url"], duration_ms=data["duration_ms"],
+    )
+
+
+class TestHttpListAndDetailAccess(DashboardClient):
+    def test_list_requires_access(self):
+        assert self.get("http-list", user=AnonymousUser()).status_code == 403
+
+    def test_detail_requires_access(self):
+        event = http_event()
+        assert self.get("http-detail", event.pk, user=AnonymousUser()).status_code == 403

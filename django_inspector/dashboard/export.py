@@ -103,6 +103,15 @@ MAIL_COLUMNS = COMMON_COLUMNS + [
     ("backend", _meta("backend")),
 ]
 
+HTTP_COLUMNS = COMMON_COLUMNS + [
+    ("library", _meta("library")),
+    ("method", _meta("method")),
+    ("url", _meta("url")),
+    ("host", _meta("host")),
+    ("status_code", _meta("status_code")),
+    ("error", _meta("error")),
+]
+
 
 def _rows(qs, columns):
     yield [header for header, _ in columns]

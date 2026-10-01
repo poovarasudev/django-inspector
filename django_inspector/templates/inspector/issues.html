@@ -128,4 +128,37 @@
         </tbody>
     </table>
 </section>
+
+<section class="inspector-issues-section">
+    <h2>Slow hosts</h2>
+    {% if hosts_capped %}<p class="inspector-issues-notice">Based on the latest {{ scan_limit }} HTTP calls in this window.</p>{% endif %}
+    <table class="inspector-table">
+        <thead>
+            <tr>
+                <th>Host</th>
+                <th>Count</th>
+                <th>p50</th>
+                <th>p95</th>
+                <th>Error rate</th>
+                <th>Slowest example</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in hosts %}
+            <tr>
+                <td class="inspector-code-inline">{{ row.host }}</td>
+                <td>{{ row.count }}</td>
+                <td>{{ row.p50|default_if_none:"-" }}ms</td>
+                <td>{{ row.p95|default_if_none:"-" }}ms</td>
+                <td>{{ row.error_rate|floatformat:2 }}</td>
+                <td><a href="{% url 'inspector:trace-detail' row.example_trace_id %}">View trace</a></td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="6" style="text-align: center; padding: 40px; color: var(--ins-text-secondary);">No slow hosts in this window.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
 {% endblock %}

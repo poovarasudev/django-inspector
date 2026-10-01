@@ -131,6 +131,20 @@ def mail_event(trace=TRACE, **metadata):
     )
 
 
+def http_event(trace=TRACE, **metadata):
+    data = {
+        "library": "requests", "method": "GET", "url": "https://api.example.com/x",
+        "host": "api.example.com", "status_code": 200, "duration_ms": 15.0,
+        "redirects": 0, "response_bytes": 10, "streamed": False,
+    }
+    data.update(metadata)
+    return Event.objects.create(
+        trace_id=trace, event_type="http.request", metadata=data,
+        method=data["method"], status_code=data.get("status_code"),
+        path=data["url"], duration_ms=data["duration_ms"],
+    )
+
+
 class TestRequestsCsv(CsvClient):
     def test_header_content_type_and_filename(self):
         request_event(path="/orders/")
@@ -277,6 +291,22 @@ class TestMailCsv(CsvClient):
         assert row["backend"] == "django.core.mail.backends.locmem.EmailBackend"
 
 
+class TestHttpCsv(CsvClient):
+    def test_header_and_row(self):
+        http_event(host="payments.example.com", url="https://payments.example.com/charge", status_code=500,
+                   error="ConnectionError: timed out")
+        rows, response = self.csv("http-list")
+        assert 'filename="http.csv"' in response["Content-Disposition"]
+        assert rows[0] == [
+            "timestamp", "trace_id", "event_type", "duration_ms",
+            "library", "method", "url", "host", "status_code", "error",
+        ]
+        row = _as_dicts(rows)[0]
+        assert row["host"] == "payments.example.com"
+        assert row["status_code"] == "500"
+        assert row["error"] == "ConnectionError: timed out"
+
+
 class TestCsvBehaviour(CsvClient):
     """Behaviour shared by every list's export, exercised once via requests."""
 
@@ -346,3 +376,6 @@ class TestExportLinksOnListPages(CsvClient):
 
     def test_mail_list_has_an_export_link(self):
         assert "Export CSV" in self.body("mail-list")
+
+    def test_http_list_has_an_export_link(self):
+        assert "Export CSV" in self.body("http-list")

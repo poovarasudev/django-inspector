@@ -34,6 +34,10 @@
            class="inspector-sidebar-link {% if request.resolver_match.url_name == 'mail-list' or request.resolver_match.url_name == 'mail-detail' %}inspector-sidebar-link--active{% endif %}">
             Mail
         </a>
+        <a href="{% url 'inspector:http-list' %}"
+           class="inspector-sidebar-link {% if request.resolver_match.url_name == 'http-list' or request.resolver_match.url_name == 'http-detail' %}inspector-sidebar-link--active{% endif %}">
+            HTTP
+        </a>
         <a href="{% url 'inspector:logs-list' %}"
            class="inspector-sidebar-link {% if request.resolver_match.url_name == 'logs-list' or request.resolver_match.url_name == 'log-detail' %}inspector-sidebar-link--active{% endif %}">
             Logs

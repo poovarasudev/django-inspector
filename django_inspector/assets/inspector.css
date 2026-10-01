@@ -306,6 +306,7 @@ body {
 .inspector-timeline-item--log::before { background: #e67e22; }
 .inspector-timeline-item--signal::before { background: #1abc9c; }
 .inspector-timeline-item--mail::before { background: #16a085; }
+.inspector-timeline-item--http::before { background: #34495e; }
 
 /* Waterfall */
 .inspector-waterfall {
@@ -358,6 +359,7 @@ body {
 .inspector-waterfall-bar--log { background: #e67e22; }
 .inspector-waterfall-bar--signal { background: #1abc9c; }
 .inspector-waterfall-bar--mail { background: #16a085; }
+.inspector-waterfall-bar--http { background: #34495e; }
 
 /* Summary cards */
 .inspector-summary {

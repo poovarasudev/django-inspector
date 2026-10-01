@@ -512,6 +512,114 @@ class TestRequestDetailMail(DashboardTestCase):
         assert "inspector-waterfall-bar--mail" in body
 
 
+def http_event(url="https://api.example.com/x", host="api.example.com", status_code=200,
+                duration_ms=15.0, trace_id=TRACE, **extra):
+    data = {
+        "library": "requests", "method": "GET", "url": url, "host": host,
+        "status_code": status_code, "duration_ms": duration_ms, "redirects": 0,
+        "response_bytes": 10, "streamed": False,
+        "origin_file": "/app/services/billing.py", "origin_line": 42, "origin_function": "charge",
+    }
+    data.update(extra)
+    return Event.objects.create(
+        trace_id=trace_id, event_type="http.request", metadata=data,
+        method=data["method"], status_code=data.get("status_code"),
+        path=data["url"], duration_ms=data["duration_ms"],
+    )
+
+
+class TestHttpPages(DashboardTestCase):
+    def setUp(self):
+        self.ok = http_event(url="https://api.example.com/orders", host="api.example.com", status_code=200)
+        self.failed = http_event(
+            url="https://payments.example.com/charge", host="payments.example.com",
+            status_code=500, error="ConnectionError: timed out",
+        )
+        self.sql = Event.objects.create(trace_id=TRACE, event_type="sql.query", metadata={"sql": "SELECT 1"})
+
+    def test_list_shows_only_http_events(self):
+        body = self.body("http-list")
+        assert "api.example.com" in body
+        assert "payments.example.com" in body
+        assert "SELECT 1" not in body
+
+    def test_filter_by_host(self):
+        body = self.body("http-list", params={"host": "payments"})
+        assert "payments.example.com" in body
+        assert "api.example.com" not in body
+
+    def test_filter_by_status_class(self):
+        body = self.body("http-list", params={"status": "5xx"})
+        assert "payments.example.com" in body
+        assert "api.example.com" not in body
+
+    def test_filter_by_errors_only(self):
+        body = self.body("http-list", params={"errors": "on"})
+        assert "payments.example.com" in body
+        assert "api.example.com" not in body
+
+    def test_host_filter_uses_no_json_operator(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection):
+            self.get("http-list", params={"host": "payments"})
+        sql = " ".join(q["sql"] for q in connection.queries).lower()
+        assert "json_extract" not in sql
+        assert "->>" not in sql
+
+    def test_htmx_request_returns_table_partial(self):
+        body = self.body("http-list", htmx=True)
+        assert "<table" in body
+        assert "inspector-sidebar" not in body
+
+    def test_detail_shows_fields_and_request_link(self):
+        request_event = Event.objects.create(
+            trace_id=TRACE, event_type="request.completed",
+            metadata={"method": "POST", "path": "/checkout/", "status_code": 200},
+        )
+        body = self.body("http-detail", self.ok.pk)
+        assert "api.example.com" in body
+        assert "/app/services/billing.py" in body
+        assert reverse("inspector:request-detail", args=[request_event.pk]) in body
+
+    def test_detail_404s_for_non_http_event(self):
+        with pytest.raises(Http404):
+            self.get("http-detail", self.sql.pk)
+
+    def test_sidebar_links_to_http(self):
+        assert reverse("inspector:http-list") in self.body("live-feed")
+
+
+class TestRequestDetailHttp(DashboardTestCase):
+    def setUp(self):
+        self.request_event = Event.objects.create(
+            trace_id=TRACE, event_type="request.completed",
+            metadata={"method": "POST", "path": "/checkout/", "status_code": 200, "latency_ms": 20.0},
+        )
+        self.http = http_event(url="https://payments.example.com/charge", host="payments.example.com")
+
+    def test_summary_counts_http_calls(self):
+        import re
+
+        body = self.body("request-detail", self.request_event.pk)
+        assert re.search(r'__value">1</div>\s*<div class="inspector-summary-card__label">HTTP Calls', body)
+
+    def test_timeline_labels_http_events(self):
+        body = self.body("request-detail", self.request_event.pk)
+        assert "inspector-timeline-item--http" in body
+        assert "payments.example.com" in body
+
+    def test_tabs_view_has_an_http_tab_linking_to_http_detail(self):
+        body = self.body("request-detail", self.request_event.pk, params={"view": "tabs"})
+        assert "HTTP (1)" in body
+        assert reverse("inspector:http-detail", args=[self.http.pk]) in body
+
+    def test_waterfall_colours_http_bars(self):
+        body = self.body("request-detail", self.request_event.pk, params={"view": "waterfall"})
+        assert "inspector-waterfall-bar--http" in body
+
+
 class TestSidebarVersion(DashboardTestCase):
     def test_sidebar_shows_the_package_version(self):
         from django_inspector import __version__
@@ -665,3 +773,15 @@ class TestIssuesPage(DashboardTestCase):
         issues_href = 'href="%s"' % reverse("inspector:issues")
         live_href = 'href="%s"' % reverse("inspector:live-feed")
         assert body.index(issues_href) < body.index(live_href)
+
+
+class TestIssuesPageSlowHosts(DashboardTestCase):
+    def test_renders_slow_hosts(self):
+        http_event(url="https://payments.example.com/charge", host="payments.example.com", duration_ms=250.0)
+        body = self.body("issues")
+        assert "Slow hosts" in body
+        assert "payments.example.com" in body
+
+    def test_empty_state(self):
+        body = self.body("issues")
+        assert "No slow hosts in this window" in body

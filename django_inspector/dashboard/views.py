@@ -120,6 +120,7 @@ def issues(request):
     exceptions, exceptions_capped = issues_data.exception_groups(since)
     queries, queries_capped = issues_data.query_shape_groups(since)
     endpoints, endpoints_capped = issues_data.endpoint_stats(since)
+    hosts, hosts_capped = issues_data.http_host_stats(since)
 
     context = {
         "window": window,
@@ -129,6 +130,8 @@ def issues(request):
         "queries_capped": queries_capped,
         "endpoints": endpoints,
         "endpoints_capped": endpoints_capped,
+        "hosts": hosts,
+        "hosts_capped": hosts_capped,
         "scan_limit": issues_data.ISSUES_SCAN_LIMIT,
         "sampled": inspector_settings.SAMPLING_RATE < 1,
     }
@@ -203,6 +206,7 @@ def request_detail(request, pk):
     log_records = [e for e in trace_events if e.event_type == "log.record"]
     signal_dispatches = [e for e in trace_events if e.event_type == "signal.dispatched"]
     mail_events = [e for e in trace_events if e.event_type == "mail.sent"]
+    http_events = [e for e in trace_events if e.event_type == "http.request"]
 
     total_query_time = sum(e.metadata.get("duration_ms", 0) for e in queries)
     slow_queries = sum(1 for e in queries if e.metadata.get("is_slow"))
@@ -225,6 +229,7 @@ def request_detail(request, pk):
         "log_records": len(log_records),
         "signal_dispatches": len(signal_dispatches),
         "mail_sent": len(mail_events),
+        "http_calls": len(http_events),
     }
 
     waterfall_events = _waterfall(trace_events, event)
@@ -247,6 +252,7 @@ def request_detail(request, pk):
         "log_records": log_records,
         "signal_dispatches": signal_dispatches,
         "mail_events": mail_events,
+        "http_events": http_events,
         "trace_truncated": trace_truncated,
         "max_detail_events": MAX_DETAIL_EVENTS,
     }
@@ -717,6 +723,43 @@ def mail_list(request):
 def mail_detail(request, pk):
     event = get_object_or_404(Event, pk=pk, event_type="mail.sent")
     return render(request, "inspector/mail/detail.html", {"event": event})
+
+
+_HTTP_STATUS_CLASSES = {
+    "2xx": (200, 300), "3xx": (300, 400), "4xx": (400, 500), "5xx": (500, 600),
+}
+
+
+def http_list(request):
+    qs = Event.objects.filter(event_type="http.request").order_by("-timestamp")
+
+    host = request.GET.get("host", "")
+    status = request.GET.get("status", "")
+
+    if host:
+        qs = qs.filter(path__icontains=host)
+    if status in _HTTP_STATUS_CLASSES:
+        low, high = _HTTP_STATUS_CLASSES[status]
+        qs = qs.filter(status_code__gte=low, status_code__lt=high)
+    if request.GET.get("errors") == "on":
+        qs = qs.filter(metadata__error__isnull=False)
+    qs = _filter_dates(request, qs)
+
+    if request.GET.get("format") == "csv":
+        return export.csv_response(qs, export.HTTP_COLUMNS, "http.csv")
+
+    page = _paginate(request, qs)
+    context = {"page": page, "filters": request.GET}
+
+    if request.headers.get("HX-Request"):
+        return render(request, "inspector/http/_table.html", context)
+    return render(request, "inspector/http/list.html", context)
+
+
+def http_detail(request, pk):
+    event = get_object_or_404(Event, pk=pk, event_type="http.request")
+    context = {"event": event, "parent_request": _parent_request(event)}
+    return render(request, "inspector/http/detail.html", context)
 
 
 @xframe_options_sameorigin

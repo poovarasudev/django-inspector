@@ -32,4 +32,6 @@ urlpatterns = [
     path("mail/<int:pk>/", inspector_required(views.mail_detail), name="mail-detail"),
     path("mail/<int:pk>/preview/", inspector_required(views.mail_preview), name="mail-preview"),
     path("mail/<int:pk>/message.eml", inspector_required(views.mail_eml), name="mail-eml"),
+    path("http/", inspector_required(views.http_list), name="http-list"),
+    path("http/<int:pk>/", inspector_required(views.http_detail), name="http-detail"),
 ]
