@@ -137,9 +137,9 @@ From the product discovery in `docs/discovery/2026-09-30-next-features.md`. Phas
 
 ### HTTP Client Watcher (PRD §11.14) — Phase 14
 
-- [ ] **HTTP-01**: Outgoing calls made with `requests` and `httpx` (sync and async) are captured with method, masked URL, status, duration and error
-- [ ] **HTTP-02**: `requests` and `httpx` are imported lazily; neither becomes a dependency, and the watcher is a no-op when they aren't installed
-- [ ] **HTTP-03**: Slow hosts appear on the Issues page
+- [x] **HTTP-01**: Outgoing calls made with `requests` and `httpx` (sync and async) are captured with method, masked URL, status, duration and error
+- [x] **HTTP-02**: `requests` and `httpx` are imported lazily; neither becomes a dependency, and the watcher is a no-op when they aren't installed
+- [x] **HTTP-03**: Slow hosts appear on the Issues page
 
 ### Celery Watcher (PRD §11.12) — Phase 15
 
@@ -218,7 +218,7 @@ Update the status when a spec for that phase ships. Specs and plans in `docs/sup
 | TEST-01..04 | Phase 11 (Query Guard for Tests) | Done |
 | DASH-03, DASH-04 | Phase 12 (Issues Page & CSV Export) | Done |
 | MAIL-01..03 | Phase 13 (Email Watcher) | Done |
-| HTTP-01..03 | Phase 14 (HTTP Client Watcher) | Planned |
+| HTTP-01..03 | Phase 14 (HTTP Client Watcher) | Done |
 | CELERY-01..05 | Phase 15 (Celery Watcher) | Planned |
 
 **Coverage:**

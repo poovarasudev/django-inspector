@@ -9,7 +9,7 @@
 - ✅ **v1.0 MVP** — Phases 1–3 (shipped 2026-05-03, tag `v1.0`)
 - ✅ **v1.1 Phase-1 Completion + Production Safety** — Phases 4–7 (complete 2026-09-30; releases as package version **0.2.0**, tag and PyPI publish pending)
 - 🚧 **v1.2 Beyond the Request** — Phases 8–13 (in progress on `feat/v1.2-beyond-the-request`; releases as package version **0.3.0**)
-- 📋 **v1.3 Outgoing Calls & Tasks** — Phases 14–15 (HTTP client and Celery watchers)
+- 🚧 **v1.3 Outgoing Calls & Tasks** — Phases 14–15 (HTTP client and Celery watchers; in progress on `feat/v1.2-beyond-the-request`)
 
 ## Phases
 
@@ -265,7 +265,7 @@ Work items:
 
 ---
 
-### 📋 v1.3 Outgoing Calls & Tasks (Planned)
+### 🚧 v1.3 Outgoing Calls & Tasks (In progress)
 
 **Milestone Goal:** Show time spent calling other services, and follow a request into the Celery tasks it sends. Both libraries stay optional: imported lazily, never dependencies.
 
@@ -280,9 +280,9 @@ Work items:
   3. The Issues page ranks slow hosts.
 
 Work items:
-- [ ] `requests` instrumentation
-- [ ] `httpx` sync and async instrumentation
-- [ ] Dashboard page and Issues integration
+- [x] `requests` instrumentation
+- [x] `httpx` sync and async instrumentation
+- [x] Dashboard page and Issues integration
 
 #### Phase 15: Celery Watcher
 **Goal**: Every task run is a trace, linked to the request that sent it.
@@ -316,7 +316,7 @@ Work items:
 | 11. Query Guard for Tests | v1.2 | 1/1 | Complete | 2026-09-30 |
 | 12. Issues Page & CSV Export | v1.2 | 1/1 | Complete | 2026-09-30 |
 | 13. Email Watcher | v1.2 | 1/1 | Complete | 2026-09-30 |
-| 14. HTTP Client Watcher | v1.3 | 0/1 | Planned | - |
+| 14. HTTP Client Watcher | v1.3 | 1/1 | Complete | 2026-10-01 |
 | 15. Celery Watcher | v1.3 | 0/1 | Planned | - |
 
 ## How work proceeds

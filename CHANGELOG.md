@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.4.0] - Unreleased
+
+The "v1.3 Phase 14" milestone: outgoing `requests`/`httpx` calls show up in the trace that made them.
+
+### Added
+
+- **HTTP client watcher**, on by default (only a masked URL and call metadata are ever stored — no headers, no bodies): patches `requests.Session.send` and `httpx.Client.send`/`httpx.AsyncClient.send` on the class, guarded against double-patching, so every session/client and every `get`/`post`/`stream`/`request` call on either library — including the `requests.get()`-style module helpers — goes through one hook per library. Neither library is a dependency: each is imported lazily inside `install_hooks()`, and a missing one is skipped with a `logger.debug` while the watcher still enables for the other. Records one `http.request` event per `send()` call — library, method, masked URL (truncated to 2048 characters), host, status code, duration, redirect count (`len(response.history)`; redirects the library follows internally still count as one call), response size (`Content-Length`, or the body length when already read and not streaming), a `streamed` flag, and origin file/line/function. An exception's `"Type: message"` (message masked) is recorded and the exception is always re-raised unchanged; metadata building and recording are both guarded so an inspector failure never breaks the call, and on the error path a recording failure is always swallowed so it can never replace the user's exception. Retries aren't captured: `urllib3` and `httpx` transport retries are invisible at `send()`. (HTTP-01, HTTP-02)
+- **`mask_url(url, extra_keys=())`** in `masking.py`: drops userinfo, redacts sensitive query parameter values by the same key rules as `mask_metadata`, then runs the result through `mask_value()` so a JWT or card number anywhere in the URL — including the path — is also caught. Falls back to masking the raw string on a parse error. (HTTP-01)
+- **`http.request` columns extractor** (`storage/columns.py`): fills `method`, `status_code` and `path` (the masked URL, truncated to 1024 like any other path column), plus a `fingerprint` that groups one endpoint's calls together — `sha1("<method>\n<host>\n<path template>")`, where the path template replaces UUID-like segments and digit runs with `?` (so `/users/1` and `/users/2`, or two different UUIDs, group the same way request routes already do). (HTTP-01, HTTP-03)
+- **HTTP dashboard page** (`/http/`, sidebar "HTTP"): host/status-class/"errors only" filters and CSV export; the host filter runs against the real `path` column (`icontains`), same as the requests list, so it stays a plain column query on both SQLite and PostgreSQL. Its detail page shows every field, the origin, and a link back to the parent request or trace. The request detail page gains an "HTTP Calls" count, timeline/waterfall entries and an HTTP tab, following the Logs/Signals/Mail pattern; the non-request trace page gets the same timeline/waterfall labelling.
+- **Issues page "Slow hosts" section** (HTTP-03): `http_host_stats(since, limit)` in `dashboard/issues.py` groups the bounded `http.request` rows by host in Python — count, p50/p95 duration, an error rate (a recorded error or a 5xx status) — ordered by p95 descending, with a link to the slowest example's trace.
+
 ## [0.3.0] - Unreleased
 
 The "v1.2 Phase 8" milestone: real `Event` columns for the fields later phases filter and group on.

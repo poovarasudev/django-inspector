@@ -76,6 +76,7 @@ Each watcher can be turned on or off under `WATCHERS`. The noisier ones are off 
 | Signal | `"signal"` | off | dispatches of the signals in `SIGNAL_WATCH_LIST`: sender, receivers in call order with per-receiver time and errors |
 | Command | `"command"` | on | commands listed in `COMMAND_WATCH_LIST`: name, args, options, bounded stdout/stderr, duration, exit code — see [Tracing management commands](#tracing-management-commands) |
 | Mail | `"mail"` | off | recipients, subject, text/HTML bodies (up to 64K characters each), headers, backend, attachment filenames/types/sizes (never contents), outcome — see [Viewing sent mail](#viewing-sent-mail) |
+| HTTP | `"http"` | on | outgoing `requests`/`httpx` calls (sync and async): method, masked URL, host, status, duration, redirects, response size, error — see [Outgoing HTTP calls](#outgoing-http-calls) |
 
 ```python
 DJANGO_INSPECTOR = {
@@ -171,6 +172,20 @@ It patches `django.core.mail.get_connection`, so `send_mail`, `send_mass_mail`, 
 What's stored: recipients and subject, the text and HTML bodies (each capped at 64K characters and masked like any other event — `SENSITIVE_KEYS` and the card/JWT scan both apply), headers (masked by key), the backend and message class, and each attachment's filename, MIME type and size — **never its contents**. The outcome is `"sent"`, `"failed"` (the backend reported fewer messages sent than you gave it — used with `fail_silently`) or `"error"` (the backend raised; your exception is always re-raised unchanged).
 
 The Mail page (`/mail/`) lists sent messages with to/subject/status filters and CSV export. Its detail page shows the message as it would arrive: a **Text** tab, a **Headers** tab, and an **HTML** tab that embeds the stored body in a sandboxed, same-origin `<iframe>` (no `allow-scripts`, no `allow-same-origin`) pointed at a dedicated preview endpoint with its own locked-down `Content-Security-Policy` (`default-src 'none'; sandbox; frame-ancestors 'self'`) — the HTML is never rendered inline in the dashboard's own page, since it's attacker-influenced content. **Download .eml** rebuilds the message from its stored fields (no connection, nothing is sent) as a downloadable `message/rfc822` file; since attachment contents were never stored, they're listed in an `X-Inspector-Omitted-Attachments` header instead of included.
+
+## Outgoing HTTP calls
+
+The HTTP watcher is **on by default**: it only ever stores a masked URL and call metadata, never headers or bodies. It patches `requests.Session.send` and `httpx.Client.send`/`httpx.AsyncClient.send` on the class, so every session or client — including the `requests.get()`-style module helpers, and `get`/`post`/`stream`/`request` on either library — goes through one hook per library. Neither `requests` nor `httpx` is a dependency: each is imported lazily when the watcher enables, a missing one is skipped, and the watcher still enables for the other.
+
+One `http.request` event per `send()` call: library, method, masked URL and host, status code, duration, redirect count (`len(response.history)` — redirects the library follows internally still count as one call), response size (`Content-Length`, or the body length when it was already read and the call wasn't streaming), a `streamed` flag, the origin file/line/function, and — on a failure — an error (`"Type: message"`, masked) with the original exception always re-raised unchanged.
+
+**Retries aren't captured**: `urllib3`'s adapter-level retries and `httpx`'s transport-level retries are invisible at `send()`, so each `send()` call is one event regardless of how many attempts happened underneath it.
+
+**Streaming.** When a call passes `stream=True`, the event's `streamed` flag is set and its duration covers only up to receiving the headers — the body is never forced to be read for byte counting, so `response_bytes` comes from `Content-Length` only (or `None` without that header).
+
+**URL masking.** Query parameters whose names match the sensitive-key rules are replaced with `***REDACTED***`, userinfo (`user:pass@`) is dropped, and the whole URL is then run through the same JWT/card-number scan as any other value — so a token in the path is caught too. The masked URL is what's stored, shown and exported; nothing unmasked ever reaches the dashboard.
+
+The HTTP page (`/http/`) lists calls with host/status-class/"errors only" filters and CSV export; its detail page shows every field, the origin, and a link back to the parent request or trace. The Issues page's **Slow hosts** section (below) ranks hosts by p95 latency.
 
 ## Catching N+1 queries in tests
 
@@ -304,7 +319,7 @@ The dashboard has these pages:
 - **Live Feed**
 - **Requests**: each request has a timeline, tabs and a waterfall view of everything in its trace.
 - **Traces**: `trace()` runs and traced commands — name, status, duration — each with a timeline and waterfall on its own `/trace/<id>/` page (a command's page also shows its exit code, args, options and captured output), filterable by type. A request's trace id also resolves there and redirects to its request page.
-- **Queries**, **Cache**, **Templates**, **Mail**, **Logs**, **Signals** and **Exceptions**: each page has filters and an "Export CSV" link — see [CSV export](#csv-export) below. Mail's detail page also has an HTML preview and a "Download .eml" button — see [Viewing sent mail](#viewing-sent-mail) above.
+- **Queries**, **Cache**, **Templates**, **Mail**, **HTTP**, **Logs**, **Signals** and **Exceptions**: each page has filters and an "Export CSV" link — see [CSV export](#csv-export) below. Mail's detail page also has an HTML preview and a "Download .eml" button — see [Viewing sent mail](#viewing-sent-mail) above.
 
 ### Pinning a trace
 
@@ -312,10 +327,11 @@ A request's detail page has a "Pin trace" button next to its trace id. Pinning s
 
 ### The Issues page
 
-`/issues/` answers "what should I fix first?" with three tables, each linking to example traces:
+`/issues/` answers "what should I fix first?" with four tables, each linking to example traces:
 - **Exceptions**, grouped by fingerprint (type plus the innermost application frame) — count, affected traces, first/last seen.
 - **Query shapes**, grouped by normalised SQL — count, affected traces, p50/p95 duration, and how many traces hit an N+1; N+1 shapes sort to the top.
 - **Endpoints**, grouped by `(method, route)` (the URL pattern, not the raw path, so `/orders/1/` and `/orders/2/` count as one) — p50/p95 duration, error rate and client-error rate.
+- **Slow hosts**, outgoing HTTP calls grouped by host — count, p50/p95 duration, and an error rate (a recorded error or a 5xx status), sorted by p95 descending.
 
 A `?window=` query parameter picks `1h`, `24h` (the default) or `7d`; an unrecognised value falls back to `24h`. Each section scans at most its newest 10,000 matching events, however big the table gets, and says so ("Based on the latest 10,000 …") when that cuts the window short. With `SAMPLING_RATE` below 1, a notice marks the counts as relative, not totals — they aren't scaled to compensate. The page is a snapshot: no live polling.
 
