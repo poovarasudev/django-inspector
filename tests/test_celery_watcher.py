@@ -364,6 +364,9 @@ class TestCeleryIntegration(TransactionTestCase):
     """CELERY-01..05 end to end: a real task through a real (in-memory broker)
     worker, asserted on the stored Event rows — not on faked internals."""
 
+    # Celery's Django fixup runs system checks, which Django 6.1 runs on every alias.
+    databases = "__all__"
+
     def test_a_task_sent_from_a_view_gets_its_own_linked_trace_with_its_events(self):
         from celery.contrib.testing.worker import start_worker
         from django.http import HttpResponse

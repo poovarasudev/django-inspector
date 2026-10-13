@@ -155,7 +155,8 @@ class TestProductionAccessCheck:
         assert checks.check_production_access() == []
 
 
-@pytest.mark.django_db
+# Django 6.1 probes JSONField support on every configured alias while checking models.
+@pytest.mark.django_db(databases="__all__")
 class TestChecksAreRegistered:
     def test_run_checks_includes_inspector_checks(self):
         from django.core.checks import run_checks
