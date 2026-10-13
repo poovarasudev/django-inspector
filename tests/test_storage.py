@@ -1,7 +1,15 @@
 import pytest
 
-from django_inspector.storage.flush import _get_buffer, buffer_event, clear_buffer, flush_events
+from django_inspector.storage.flush import (
+    _EventBuffer,
+    _get_buffer,
+    buffer_event,
+    clear_buffer,
+    dropped_count,
+    flush_events,
+)
 from django_inspector.storage.models import Event
+from django_inspector.tracing.scope import TraceScope
 
 
 @pytest.fixture(autouse=True)
@@ -38,6 +46,22 @@ def test_flush_events_clears_buffer():
     buffer_event("bbb", "request.started", {})
     flush_events()
     assert len(_get_buffer()) == 0
+
+
+@pytest.mark.django_db
+def test_flush_events_writes_parent_trace_id():
+    buffer_event("task-trace", "task.completed", {}, parent_trace_id="sender-trace")
+    flush_events()
+    event = Event.objects.get(trace_id="task-trace")
+    assert event.parent_trace_id == "sender-trace"
+
+
+@pytest.mark.django_db
+def test_flush_events_parent_trace_id_defaults_to_none():
+    buffer_event("ccc2", "sql.query", {})
+    flush_events()
+    event = Event.objects.get(trace_id="ccc2")
+    assert event.parent_trace_id is None
 
 
 @pytest.mark.django_db
@@ -95,6 +119,12 @@ class TestMaxEventsPerTrace:
         buffer_event("ggg", "request.completed", {})
         assert [e["event_type"] for e in _get_buffer()] == ["sql.query", "request.completed"]
 
+    def test_the_trace_completed_event_is_never_dropped(self, settings):
+        settings.DJANGO_INSPECTOR = {"MAX_EVENTS_PER_TRACE": 1}
+        buffer_event("iii", "sql.query", {})
+        buffer_event("iii", "trace.completed", {})
+        assert [e["event_type"] for e in _get_buffer()] == ["sql.query", "trace.completed"]
+
     def test_clear_resets_the_dropped_count(self, settings):
         from django_inspector.storage.flush import dropped_count
 
@@ -127,3 +157,144 @@ def test_request_event_records_start_time_and_dropped_events(client, settings):
     assert request_event.metadata["events_dropped"] == 2
     # The request event is stamped with the request's start, before its children.
     assert request_event.timestamp <= min(e.timestamp for e in others)
+
+
+class TestFlushDerivesColumns:
+    @pytest.mark.django_db
+    def test_flush_writes_derived_columns(self):
+        buffer_event(
+            "iii", "sql.query", {"sql": "SELECT * FROM t WHERE id = 1", "db_alias": "default", "duration_ms": 3.5}
+        )
+        flush_events()
+        event = Event.objects.get(trace_id="iii")
+        assert event.duration_ms == 3.5
+        assert len(event.fingerprint) == 16
+
+    @pytest.mark.django_db
+    def test_a_failing_extractor_still_writes_the_event_with_null_columns(self, settings, caplog):
+        import logging
+
+        settings.DJANGO_INSPECTOR = {}
+        buffer_event("jjj", "sql.query", {"sql": "SELECT 1", "db_alias": "default"})
+        with caplog.at_level(logging.WARNING, logger="django_inspector"):
+            from unittest import mock
+
+            from django_inspector.storage import flush as flush_module
+
+            with mock.patch.object(
+                flush_module, "derive_columns", side_effect=RuntimeError("boom")
+            ):
+                count = flush_events()
+        assert count == 1
+        event = Event.objects.get(trace_id="jjj")
+        assert event.method is None
+        assert event.fingerprint is None
+        assert "could not derive columns" in caplog.text
+
+    @pytest.mark.django_db
+    def test_raise_errors_setting_raises_instead_of_swallowing(self, settings):
+        from unittest import mock
+
+        from django_inspector.storage import flush as flush_module
+
+        settings.DJANGO_INSPECTOR = {"INSPECTOR_RAISE_ERRORS": True}
+        buffer_event("kkk", "sql.query", {"sql": "SELECT 1"})
+        with mock.patch.object(flush_module, "derive_columns", side_effect=RuntimeError("boom")):
+            with pytest.raises(RuntimeError):
+                flush_events()
+
+    @pytest.mark.django_db
+    def test_request_through_the_middleware_fills_columns(self, settings):
+        from django.http import HttpResponse
+        from django.test import RequestFactory
+
+        from django_inspector.middleware import InspectorMiddleware
+
+        settings.DJANGO_INSPECTOR = {}
+        InspectorMiddleware(lambda request: HttpResponse("ok"))(RequestFactory().get("/health/"))
+        event = Event.objects.get(event_type="request.completed")
+        assert event.method == "GET"
+        assert event.path == "/health/"
+        assert event.status_code == 200
+        assert event.duration_ms is not None
+
+
+class TestChunkedFlush:
+    """CMD-03: a chunked buffer writes its events before the trace ends."""
+
+    @pytest.mark.django_db
+    def test_events_reach_the_db_before_the_trace_ends(self):
+        scope = TraceScope.start(chunk_size=3)
+        try:
+            for i in range(5):
+                buffer_event(scope.trace_id, "sql.query", {"n": i})
+            # The first chunk of 3 is already written; 2 remain buffered.
+            assert Event.objects.filter(trace_id=scope.trace_id).count() == 3
+            assert len(_get_buffer()) == 2
+        finally:
+            scope.flush(True)
+            scope.close()
+        assert Event.objects.filter(trace_id=scope.trace_id).count() == 5
+
+    @pytest.mark.django_db
+    def test_written_counts_against_max_events_per_trace(self, settings):
+        settings.DJANGO_INSPECTOR = {"MAX_EVENTS_PER_TRACE": 4}
+        scope = TraceScope.start(chunk_size=3)
+        try:
+            for i in range(6):
+                buffer_event(scope.trace_id, "sql.query", {"n": i})
+            assert dropped_count() == 2
+        finally:
+            scope.flush(True)
+            scope.close()
+        assert Event.objects.filter(trace_id=scope.trace_id).count() == 4
+
+    @pytest.mark.django_db
+    def test_dropped_survives_a_chunk_flush(self, settings):
+        settings.DJANGO_INSPECTOR = {"MAX_EVENTS_PER_TRACE": 2}
+        scope = TraceScope.start(chunk_size=1)
+        try:
+            buffer_event(scope.trace_id, "sql.query", {"n": 1})
+            buffer_event(scope.trace_id, "sql.query", {"n": 2})
+            buffer_event(scope.trace_id, "sql.query", {"n": 3})
+            assert dropped_count() == 1
+        finally:
+            scope.flush(True)
+            scope.close()
+
+    def test_clear_resets_chunk_state_too(self):
+        buf = _EventBuffer(chunk_size=2)
+        buf.append({"a": 1})
+        buf.written = 5
+        buf.force_keep = True
+        buf.dropped = 3
+        buf.clear()
+        assert len(buf) == 0
+        assert buf.written == 0
+        assert buf.force_keep is False
+        assert buf.dropped == 0
+
+    @pytest.mark.django_db
+    def test_force_keep_keeps_the_rest_of_a_chunked_trace_at_sampling_rate_0(self, settings):
+        settings.DJANGO_INSPECTOR = {"SAMPLING_RATE": 0.0}
+        scope = TraceScope.start(chunk_size=2)
+        try:
+            for i in range(3):
+                buffer_event(scope.trace_id, "sql.query", {"n": i})
+        finally:
+            # A caller (e.g. should_keep() picking False) asks to discard, but
+            # a chunk is already in the database: force_keep overrides it.
+            scope.flush(False)
+            scope.close()
+        assert Event.objects.filter(trace_id=scope.trace_id).count() == 3
+
+    @pytest.mark.django_db
+    def test_unchunked_buffers_are_unaffected(self):
+        scope = TraceScope.start()
+        try:
+            buffer_event(scope.trace_id, "sql.query", {"n": 1})
+            assert Event.objects.filter(trace_id=scope.trace_id).count() == 0
+        finally:
+            scope.flush(True)
+            scope.close()
+        assert Event.objects.filter(trace_id=scope.trace_id).count() == 1

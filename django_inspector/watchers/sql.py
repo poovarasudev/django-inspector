@@ -6,17 +6,17 @@ Requirements: SQL-01..SQL-07
 """
 
 import logging
-import re
 import time
 from collections import Counter
 from contextvars import ContextVar
-from functools import lru_cache
 from typing import Tuple, Union
 
+from django.conf import settings as django_settings
 from django.db import connections
 
 from django_inspector.conf import inspector_settings
 from django_inspector.sampling import detail_enabled
+from django_inspector.storage.columns import normalize_sql as _normalize_sql
 from django_inspector.tracing.context import get_current_trace_id
 from django_inspector.watchers import registry
 from django_inspector.watchers.base import BaseWatcher
@@ -28,6 +28,7 @@ logger = logging.getLogger("django_inspector")
 MAX_SQL_LENGTH = 10000   # characters of SQL text stored per query
 MAX_PARAMS = 100          # parameters stored per query
 MAX_PARAM_LENGTH = 500    # characters stored per parameter
+MAX_TRACKED_QUERIES = 10000  # distinct query shapes/exact queries tracked per trace (each, separately)
 
 
 class _QueryStats:
@@ -44,12 +45,30 @@ class _QueryStats:
         self.exact: Counter[int] = Counter()    # hash of (SQL, params) -> count
 
     def add(self, sql, params) -> Tuple[int, int]:
-        """Count one query; return (similar count, exact duplicate count)."""
+        """
+        Count one query; return (similar count, exact duplicate count).
+
+        A trace running very many distinct queries (or a management command
+        processing a huge batch) must keep memory flat: once MAX_TRACKED_QUERIES
+        distinct shapes (or exact queries) are tracked, a further new one isn't
+        added — it's reported as a single occurrence, so it never raises a false
+        N+1 or duplicate flag. Counts for shapes already tracked keep growing.
+        """
         normalized = _normalize_sql(sql)
-        self.similar[normalized] += 1
+        if normalized in self.similar or len(self.similar) < MAX_TRACKED_QUERIES:
+            self.similar[normalized] += 1
+            similar_count = self.similar[normalized]
+        else:
+            similar_count = 1
+
         key = hash((sql, _params_key(params)))
-        self.exact[key] += 1
-        return self.similar[normalized], self.exact[key]
+        if key in self.exact or len(self.exact) < MAX_TRACKED_QUERIES:
+            self.exact[key] += 1
+            exact_count = self.exact[key]
+        else:
+            exact_count = 1
+
+        return similar_count, exact_count
 
     def clear(self):
         self.similar.clear()
@@ -172,6 +191,13 @@ def _query_wrapper(execute, sql, params, many, context):
     # SQL-06/07: N+1 (3+ similar queries) and exact duplicates, counted in O(1)
     similar_count, duplicate_count = _get_query_log().add(sql, params)
 
+    # TEST-04: dev-mode N+1 reporting, once per shape per trace, DEBUG-gated.
+    # The setting comparison below is the only added cost when it's "off"
+    # (the default): DEBUG is checked only on the rare similar_count == 3 path.
+    n_plus_one_setting = inspector_settings.N_PLUS_ONE
+    if n_plus_one_setting != "off" and similar_count == 3:
+        _report_n_plus_one(n_plus_one_setting, sql, origin)
+
     metadata = {
         "sql": sql[:MAX_SQL_LENGTH],
         "duration_ms": duration_ms,
@@ -204,6 +230,27 @@ def _query_wrapper(execute, sql, params, many, context):
             logger.warning("inspector: error recording sql.query event", exc_info=True)
 
     return result
+
+
+def _report_n_plus_one(setting: str, sql: str, origin: dict) -> None:
+    """TEST-04: N_PLUS_ONE="warn"/"raise" for the shape that just hit its 3rd query."""
+    if not django_settings.DEBUG:
+        return
+    shape = _normalize_sql(sql)
+    if setting == "warn":
+        logger.warning(
+            "django-inspector: N+1 query (3× so far) from %s:%s: %s",
+            origin.get("file"), origin.get("line"), shape,
+        )
+    elif setting == "raise":
+        # Deliberately outside the usual catch-and-log handling below:
+        # surfacing the query is this mode's entire purpose. The query has
+        # already run by this point.
+        from django_inspector.testing.guard import NPlusOneDetected
+
+        raise NPlusOneDetected(
+            "N+1 query (3× so far) from %s:%s: %s" % (origin.get("file"), origin.get("line"), shape)
+        )
 
 
 def _is_inspector_query(sql: str) -> bool:
@@ -242,20 +289,8 @@ def _params_key(params):
         return id(params)
 
 
-_QUOTED = re.compile(r"'[^']*'")
-_NUMBER = re.compile(r"\b\d+\b")
-
-
-@lru_cache(maxsize=2048)
-def _normalize_sql(sql: str) -> str:
-    """
-    Normalize SQL by replacing literal values with placeholders.
-    Used for N+1 pattern comparison.
-    """
-    normalized = _QUOTED.sub("'?'", sql)
-    normalized = _NUMBER.sub("?", normalized)
-    return normalized.replace("%s", "?").strip()
-
+# _normalize_sql above is django_inspector.storage.columns.normalize_sql,
+# re-exported under its old name so existing imports keep working.
 
 # Auto-register on import
 register("sql", SQLWatcher)

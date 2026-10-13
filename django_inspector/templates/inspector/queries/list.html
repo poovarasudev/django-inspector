@@ -1,8 +1,10 @@
 {% extends "inspector/base.html" %}
+{% load inspector_tags %}
 {% block title %}SQL Queries — Inspector{% endblock %}
 {% block content %}
 <div class="inspector-page-header">
     <h1>SQL Queries</h1>
+    <a class="inspector-btn" href="?{% csv_query %}">Export CSV</a>
 </div>
 
 <form class="inspector-filter-bar"

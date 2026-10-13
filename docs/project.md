@@ -37,24 +37,26 @@
 - ✓ Dashboard: Logs and Signals pages; request detail shows log/signal events — v1.1 (Phase 6)
 - ✓ **Native ASGI** — async-capable middleware; every v1.1 watcher verified under concurrent ASGI requests and WSGI (ASYNC-03) — v1.1 (Phase 7)
 - ✓ **Releasable package** — Python 3.8+ imports fixed, templates packaged, MIT license, version 0.2.0, README, CHANGELOG, CI — v1.1 (Phase 7)
+- ✓ **HTTP client watcher** — `requests`/`httpx` (sync and async) calls: method, masked URL, host, status, duration, redirects, response size, error; lazily imported, never a dependency (PRD §11.14) — v1.3 (Phase 14)
+- ✓ **Celery watcher** — signals only (no class patching); a sent task carries its trace id in message headers (`task.sent`), the worker gives the task its own trace anchored by `task.completed` with `parent_trace_id` back to the sender, sampled independently; lazily imported, never a dependency (PRD §11.12) — v1.3 (Phase 15)
 
 ### Active
 
 
-<!-- None: v1.1 is complete. Next: tag and publish 0.2.0, then break down v1.2 in docs/roadmap.md. -->
+- **v1.2 "Beyond the request"** (phases 8–13, package 0.3.0): event schema v2, trace API, management command watcher, query guard for tests, Issues page and CSV export, email watcher. See `docs/roadmap.md` and `docs/discovery/2026-09-30-next-features.md`.
 
 ### Out of Scope
 
 <!-- Explicitly deferred — kept here so we don't re-add them by accident. -->
 
-- **Phase 2 PRD watchers** (Model, Email, Management Command, Middleware) — deferred to v1.2 / v0.3 milestone.
-- **Phase 3 PRD watchers** (Celery, Scheduler, HTTP Client, Redis) — deferred to v1.3 / v0.5.
-- **DRF / Channels / Admin integrations** — deferred to v1.4 / v1.0 PRD label.
-- **OpenTelemetry / distributed tracing / cross-service correlation** — deferred to v2.0 (PRD §5 non-goals).
+- **Model and Middleware watchers** (PRD §11.8, §11.11) — deferred by the 2026-09-30 discovery: both add per-request cost for little insight. Email and Management Command watchers are v1.2 phases 13 and 10.
+- **Scheduler and Redis watchers** (PRD §11.13, §11.15) — not planned yet. Celery and HTTP Client watchers are v1.3 phases 14–15.
+- **Spans** (`span_id`, `parent_span_id`) — not needed by anything planned; `parent_trace_id` links traces instead.
+- **DRF / Channels integrations** — deferred to v1.4 / v1.0 PRD label (a read-only `Event` admin is in Phase 8).
+- **OpenTelemetry / distributed tracing / cross-service correlation** — deferred to v2.0 (PRD §5 non-goals). Celery tasks get their own traces linked by `parent_trace_id`, not one trace spanning processes.
 - **Plugin entry points** (`setuptools` `entry_points` group) — deferred; internal `register()` covers in-tree watchers for now.
 - **Non-ORM storage backends** (Redis, file, object) — `AbstractStorageBackend` not introduced until a second backend is actually needed (premature abstraction).
-- **Async write offload** (thread pool / Celery handoff) — deferred to v1.2; synchronous bulk_create is acceptable while sampling caps load.
-- **Denormalized hot-path columns** (`method`, `status_code` as real columns) — deferred to v1.2; JSON path filters are good enough for SQLite/PostgreSQL workloads at v1.1 volume.
+- **Async write offload** (thread pool / Celery handoff) — deferred past v1.2; measure the share of `bulk_create` in the p50 before building it.
 - **CPU flame graphs / memory profiling / RUM / frontend instrumentation** — out of scope per PRD §5.
 
 ## Context

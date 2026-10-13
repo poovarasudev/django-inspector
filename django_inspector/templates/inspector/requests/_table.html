@@ -27,7 +27,7 @@
             </td>
             <td><a href="{% url 'inspector:request-detail' event.pk %}">{{ event.metadata.latency_ms }}ms</a></td>
             <td>{{ event.metadata.user|default:"-" }}</td>
-            <td>{{ event.timestamp|timesince }} ago</td>
+            <td>{{ event.timestamp|timesince }} ago {% if event.pinned %}<span class="inspector-badge inspector-badge--pinned">Pinned</span>{% endif %}</td>
         </tr>
         {% empty %}
         <tr>

@@ -8,6 +8,7 @@ Requirements: MASK-01..06
 """
 
 import re
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 _BUILTIN_SENSITIVE_KEYS = frozenset([
     "password", "passwd", "pwd",
@@ -118,3 +119,35 @@ def _luhn_valid(digits: str) -> bool:
                 n -= 9
         total += n
     return total % 10 == 0
+
+
+def mask_url(url: str, extra_keys=()) -> str:
+    """
+    Return ``url`` with userinfo dropped, sensitive query parameter values
+    redacted, then run through mask_value() (so a JWT or card number
+    anywhere in it — including the path — is also caught).
+
+    ``url`` must already be a ``str``; a caller holding an ``httpx.URL`` or
+    similar object must ``str()`` it first. Any parsing error (a malformed
+    URL) falls back to masking the raw string with mask_value().
+    """
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname or ""
+        if ":" in host:  # IPv6 literal
+            host = "[%s]" % host
+        netloc = host + (":%s" % parts.port if parts.port else "")
+        query = _mask_query(parts.query, extra_keys)
+        rebuilt = urlunsplit((parts.scheme, netloc, parts.path, query, parts.fragment))
+    except Exception:
+        return mask_value(url)
+    return mask_value(rebuilt)
+
+
+def _mask_query(query: str, extra_keys) -> str:
+    from django_inspector.conf import inspector_settings
+    extra = list(inspector_settings.SENSITIVE_KEYS or []) + list(extra_keys)
+    all_keys = _BUILTIN_SENSITIVE_KEYS | frozenset(str(k).lower() for k in extra)
+    pairs = parse_qsl(query, keep_blank_values=True)
+    masked = [(k, _REDACTED if k.lower() in all_keys else v) for k, v in pairs]
+    return urlencode(masked, safe="*")

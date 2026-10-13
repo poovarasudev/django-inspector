@@ -42,7 +42,7 @@ class Command(BaseCommand):
         cutoff = timezone.now() - timedelta(hours=hours)
 
         if options["dry_run"]:
-            count = Event.objects.filter(timestamp__lt=cutoff).count()
+            count = Event.objects.filter(timestamp__lt=cutoff, pinned=False).count()
             self.stdout.write(
                 f"Would delete {count} event(s) older than {hours_text} hours (cutoff: {cutoff})"
             )

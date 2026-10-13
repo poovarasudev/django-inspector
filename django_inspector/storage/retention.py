@@ -25,8 +25,9 @@ _last_prune = None  # time.monotonic() of the last prune in this process
 
 def delete_older_than(cutoff, batch_size=10000, max_batches=None) -> int:
     """
-    Delete events with a timestamp before ``cutoff``, ``batch_size`` rows at
-    a time (short transactions, no long table locks). Returns rows deleted.
+    Delete unpinned events with a timestamp before ``cutoff``, ``batch_size``
+    rows at a time (short transactions, no long table locks). Pinned events
+    are skipped. Returns rows deleted.
     """
     from django_inspector.storage.models import Event
 
@@ -34,7 +35,7 @@ def delete_older_than(cutoff, batch_size=10000, max_batches=None) -> int:
     batches = 0
     while max_batches is None or batches < max_batches:
         ids = list(
-            Event.objects.filter(timestamp__lt=cutoff)
+            Event.objects.filter(timestamp__lt=cutoff, pinned=False)
             .order_by("timestamp")
             .values_list("id", flat=True)[:batch_size]
         )

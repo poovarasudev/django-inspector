@@ -40,6 +40,10 @@ class TestSettingsCheck:
         ("RETENTION_HOURS", 0),
         ("DASHBOARD_URL_PREFIX", None),
         ("WATCHERS", ["sql"]),
+        ("TRACE_HEADER", "always"),
+        ("TRACE_HEADER", 1),
+        ("N_PLUS_ONE", "verbose"),
+        ("N_PLUS_ONE", True),
     ])
     def test_invalid_values_are_errors(self, key, value):
         with override_settings(DJANGO_INSPECTOR={key: value}):
@@ -53,6 +57,12 @@ class TestSettingsCheck:
         ("WATCHERS", {"cache": True}),
         ("RETENTION_HOURS", None),
         ("RETENTION_HOURS", 48),
+        ("TRACE_HEADER", "debug"),
+        ("TRACE_HEADER", True),
+        ("TRACE_HEADER", False),
+        ("N_PLUS_ONE", "off"),
+        ("N_PLUS_ONE", "warn"),
+        ("N_PLUS_ONE", "raise"),
     ])
     def test_valid_values_pass(self, key, value):
         with override_settings(DJANGO_INSPECTOR={key: value}):
@@ -81,6 +91,22 @@ class TestSettingsCheck:
     @override_settings(DJANGO_INSPECTOR={"INSPECTOR_DASHBOARD_PERMISSION": "nope.check"})
     def test_unimportable_permission_is_an_error(self):
         assert _ids(checks.check_settings()) == ["django_inspector.E005"]
+
+    @override_settings(DJANGO_INSPECTOR={"COMMAND_WATCH_LIST": "backfill"})
+    def test_command_watch_list_must_be_a_list_of_strings(self):
+        assert "django_inspector.E002" in _ids(checks.check_settings())
+
+    @override_settings(DJANGO_INSPECTOR={"COMMAND_WATCH_LIST": ["backfill"]})
+    def test_command_watch_list_of_strings_passes(self):
+        assert checks.check_settings() == []
+
+    @override_settings(DJANGO_INSPECTOR={"COMMAND_WATCH_LIST": ["migrate"]})
+    def test_never_traced_name_warns(self):
+        assert _ids(checks.check_settings()) == ["django_inspector.W009"]
+
+    @override_settings(DJANGO_INSPECTOR={"COMMAND_WATCH_LIST": ["backfill", "shell"]})
+    def test_never_traced_name_warns_alongside_a_valid_one(self):
+        assert _ids(checks.check_settings()) == ["django_inspector.W009"]
 
 
 class TestMiddlewareCheck:
@@ -129,7 +155,8 @@ class TestProductionAccessCheck:
         assert checks.check_production_access() == []
 
 
-@pytest.mark.django_db
+# Django 6.1 probes JSONField support on every configured alias while checking models.
+@pytest.mark.django_db(databases="__all__")
 class TestChecksAreRegistered:
     def test_run_checks_includes_inspector_checks(self):
         from django.core.checks import run_checks

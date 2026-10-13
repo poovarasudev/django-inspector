@@ -1,0 +1,39 @@
+{% extends "inspector/base.html" %}
+{% load inspector_tags %}
+{% block title %}HTTP — Inspector{% endblock %}
+{% block content %}
+<div class="inspector-page-header">
+    <h1>HTTP</h1>
+    <a class="inspector-btn" href="?{% csv_query %}">Export CSV</a>
+</div>
+
+<form class="inspector-filter-bar"
+      hx-get="{% url 'inspector:http-list' %}"
+      hx-target="#results-table"
+      hx-push-url="true"
+      hx-trigger="change, keyup changed delay:300ms from:input[type=search]">
+    <label>
+        Host
+        <input type="search" name="host" value="{{ filters.host|default:'' }}" placeholder="contains…">
+    </label>
+    <label>
+        Status
+        <select name="status">
+            <option value="">All</option>
+            <option value="2xx" {% if filters.status == "2xx" %}selected{% endif %}>2xx</option>
+            <option value="3xx" {% if filters.status == "3xx" %}selected{% endif %}>3xx</option>
+            <option value="4xx" {% if filters.status == "4xx" %}selected{% endif %}>4xx</option>
+            <option value="5xx" {% if filters.status == "5xx" %}selected{% endif %}>5xx</option>
+        </select>
+    </label>
+    <label>
+        <input type="checkbox" name="errors" {% if filters.errors == "on" %}checked{% endif %}> Errors only
+    </label>
+</form>
+
+<div id="results-table">
+    {% include "inspector/http/_table.html" %}
+</div>
+
+{% include "inspector/_pagination.html" %}
+{% endblock %}

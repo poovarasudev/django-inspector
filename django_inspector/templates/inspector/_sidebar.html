@@ -2,6 +2,10 @@
 <aside class="inspector-sidebar">
     <div class="inspector-sidebar-title">&#128269; Inspector</div>
     <nav class="inspector-sidebar-nav">
+        <a href="{% url 'inspector:issues' %}"
+           class="inspector-sidebar-link {% if request.resolver_match.url_name == 'issues' %}inspector-sidebar-link--active{% endif %}">
+            Issues
+        </a>
         <a href="{% url 'inspector:live-feed' %}"
            class="inspector-sidebar-link {% if request.resolver_match.url_name == 'live-feed' %}inspector-sidebar-link--active{% endif %}">
             Live Feed
@@ -9,6 +13,10 @@
         <a href="{% url 'inspector:requests-list' %}"
            class="inspector-sidebar-link {% if request.resolver_match.url_name == 'requests-list' or request.resolver_match.url_name == 'request-detail' %}inspector-sidebar-link--active{% endif %}">
             Requests
+        </a>
+        <a href="{% url 'inspector:traces-list' %}"
+           class="inspector-sidebar-link {% if request.resolver_match.url_name == 'traces-list' or request.resolver_match.url_name == 'trace-detail' %}inspector-sidebar-link--active{% endif %}">
+            Traces
         </a>
         <a href="{% url 'inspector:queries-list' %}"
            class="inspector-sidebar-link {% if request.resolver_match.url_name == 'queries-list' or request.resolver_match.url_name == 'query-detail' %}inspector-sidebar-link--active{% endif %}">
@@ -21,6 +29,14 @@
         <a href="{% url 'inspector:templates-list' %}"
            class="inspector-sidebar-link {% if request.resolver_match.url_name == 'templates-list' or request.resolver_match.url_name == 'template-detail' %}inspector-sidebar-link--active{% endif %}">
             Templates
+        </a>
+        <a href="{% url 'inspector:mail-list' %}"
+           class="inspector-sidebar-link {% if request.resolver_match.url_name == 'mail-list' or request.resolver_match.url_name == 'mail-detail' %}inspector-sidebar-link--active{% endif %}">
+            Mail
+        </a>
+        <a href="{% url 'inspector:http-list' %}"
+           class="inspector-sidebar-link {% if request.resolver_match.url_name == 'http-list' or request.resolver_match.url_name == 'http-detail' %}inspector-sidebar-link--active{% endif %}">
+            HTTP
         </a>
         <a href="{% url 'inspector:logs-list' %}"
            class="inspector-sidebar-link {% if request.resolver_match.url_name == 'logs-list' or request.resolver_match.url_name == 'log-detail' %}inspector-sidebar-link--active{% endif %}">

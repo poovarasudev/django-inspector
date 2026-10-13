@@ -1,0 +1,103 @@
+{% extends "inspector/base.html" %}
+{% load inspector_tags %}
+{% block title %}Mail — Inspector{% endblock %}
+{% block content %}
+<a href="{% url 'inspector:mail-list' %}" class="inspector-back-link">&#8592; Back to Mail</a>
+
+<div class="inspector-page-header">
+    <h1>{{ event.metadata.subject|default:"(no subject)" }}</h1>
+    <div style="display: flex; align-items: center; gap: 8px;">
+        <a class="inspector-btn" href="{% url 'inspector:mail-eml' event.pk %}" download>Download .eml</a>
+    </div>
+</div>
+
+<div class="inspector-card">
+    <table class="inspector-detail-table">
+        <tr><th>From</th><td>{{ event.metadata.from_email|default:"-" }}</td></tr>
+        <tr><th>To</th><td>{{ event.metadata.to|join:", "|default:"-" }}</td></tr>
+        {% if event.metadata.cc %}<tr><th>Cc</th><td>{{ event.metadata.cc|join:", " }}</td></tr>{% endif %}
+        {% if event.metadata.bcc %}<tr><th>Bcc</th><td>{{ event.metadata.bcc|join:", " }}</td></tr>{% endif %}
+        {% if event.metadata.reply_to %}<tr><th>Reply-To</th><td>{{ event.metadata.reply_to|join:", " }}</td></tr>{% endif %}
+        <tr><th>Subject</th><td>{{ event.metadata.subject|default:"-" }}</td></tr>
+        <tr>
+            <th>Status</th>
+            <td>
+                {% if event.metadata.status == "sent" %}<span class="inspector-indicator inspector-indicator--hit">SENT</span>
+                {% elif event.metadata.status == "failed" %}<span class="inspector-indicator inspector-indicator--miss">FAILED</span>
+                {% elif event.metadata.status == "error" %}<span class="inspector-indicator inspector-indicator--slow">ERROR</span>
+                {% endif %}
+                {% if event.metadata.error %}<span style="margin-left: 8px; color: var(--ins-text-secondary);">{{ event.metadata.error }}</span>{% endif %}
+            </td>
+        </tr>
+        <tr><th>Backend</th><td class="inspector-code-inline">{{ event.metadata.backend|default:"-" }}</td></tr>
+        <tr><th>Duration</th><td>{{ event.metadata.duration_ms }}ms</td></tr>
+    </table>
+</div>
+
+<div class="inspector-card">
+    <div class="inspector-tabs">
+        <button class="inspector-tab inspector-tab--active" type="button" data-inspector-tab="mail-html-tab">HTML</button>
+        <button class="inspector-tab" type="button" data-inspector-tab="mail-text-tab">Text</button>
+        <button class="inspector-tab" type="button" data-inspector-tab="mail-headers-tab">Headers</button>
+    </div>
+
+    <div id="mail-html-tab" class="inspector-tab-panel inspector-tab-panel--active">
+        {% if event.metadata.html_body %}
+        <iframe sandbox src="{% url 'inspector:mail-preview' event.pk %}" referrerpolicy="no-referrer"
+                style="width: 100%; height: 480px; border: 1px solid var(--ins-border); border-radius: 6px;"></iframe>
+        {% if event.metadata.html_body_truncated %}
+        <p class="inspector-notice">The stored HTML body was truncated at {{ event.metadata.html_body|length }} characters.</p>
+        {% endif %}
+        {% else %}
+        <p style="color: var(--ins-text-secondary); padding: 20px;">This message has no HTML body.</p>
+        {% endif %}
+    </div>
+
+    <div id="mail-text-tab" class="inspector-tab-panel">
+        {% if event.metadata.text_body %}
+        <pre class="inspector-code">{{ event.metadata.text_body }}</pre>
+        {% if event.metadata.text_body_truncated %}
+        <p class="inspector-notice">Truncated at {{ event.metadata.text_body|length }} characters.</p>
+        {% endif %}
+        {% else %}
+        <p style="color: var(--ins-text-secondary); padding: 20px;">This message has no text body.</p>
+        {% endif %}
+    </div>
+
+    <div id="mail-headers-tab" class="inspector-tab-panel">
+        {% if event.metadata.headers %}
+        <pre class="inspector-code" style="margin: 0;">{% for k, v in event.metadata.headers.items %}{{ k }}: {{ v }}
+{% endfor %}</pre>
+        {% else %}
+        <p style="color: var(--ins-text-secondary); padding: 20px;">No extra headers.</p>
+        {% endif %}
+    </div>
+</div>
+
+{% if event.metadata.attachments %}
+<div class="inspector-card">
+    <h3 style="margin-bottom: 12px; font-size: 14px; color: var(--ins-text-secondary); text-transform: uppercase;">Attachments ({{ event.metadata.attachments|length }})</h3>
+    <table class="inspector-table">
+        <thead>
+            <tr><th>Filename</th><th>MIME type</th><th>Size</th></tr>
+        </thead>
+        <tbody>
+            {% for attachment in event.metadata.attachments %}
+            <tr>
+                <td>{{ attachment.filename|default:"(unnamed)" }}</td>
+                <td class="inspector-code-inline">{{ attachment.mimetype|default:"-" }}</td>
+                <td>{% if attachment.size is not None %}{{ attachment.size }} bytes{% else %}-{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<div class="inspector-card">
+    <a href="{% url 'inspector:trace-detail' event.trace_id %}" style="color: var(--ins-accent); text-decoration: none; font-weight: 500;">
+        View Trace &#8594; <code class="inspector-code-inline">{{ event.trace_id }}</code>
+    </a>
+</div>
+
+{% endblock %}

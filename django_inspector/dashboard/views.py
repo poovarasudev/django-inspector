@@ -3,21 +3,48 @@ import os
 from functools import lru_cache
 
 from django.conf import settings
+from django.core.mail import EmailMultiAlternatives
 from django.core.paginator import Paginator
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.functional import cached_property
+from django.utils.text import slugify
+from django.views.decorators.clickjacking import xframe_options_sameorigin
+from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
+from django.views.decorators.http import require_POST
 
 from django_inspector.conf import inspector_settings
+from django_inspector.dashboard import export
+from django_inspector.dashboard import issues as issues_data
 from django_inspector.storage.models import Event
 from django_inspector.watchers.cache import CACHE_EVENT_TYPES
 
 CACHE_OPERATIONS = [event_type.split(".", 1)[1] for event_type in CACHE_EVENT_TYPES]
 LOG_LEVELS = [(10, "DEBUG"), (20, "INFO"), (30, "WARNING"), (40, "ERROR"), (50, "CRITICAL")]
 PAGE_SIZE = 25
+
+# The mail preview serves untrusted, attacker-influenced HTML: no scripts, no
+# remote loads, no framing beyond the dashboard's own same-origin iframe.
+# The dashboard's CSP helper (auth.inspector_required) only adds its own
+# policy when none is set, so this one stands unchanged.
+MAIL_PREVIEW_CSP = (
+    "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; "
+    "sandbox; frame-ancestors 'self'"
+)
 MAX_DETAIL_EVENTS = 2000  # events shown on one request's page
+
+# Issues page window choices (DASH-04); an unrecognised ?window= falls back to 24h.
+ISSUES_WINDOWS = {
+    "1h": datetime.timedelta(hours=1),
+    "24h": datetime.timedelta(hours=24),
+    "7d": datetime.timedelta(days=7),
+}
+ISSUES_DEFAULT_WINDOW = "24h"
+
+# Event types that anchor a non-request trace on /trace/<id>/ and the Traces list.
+TRACE_ANCHOR_TYPES = ("trace.completed", "command.completed", "task.completed")
 
 _ASSET_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
 _ASSET_TYPES = {
@@ -78,6 +105,38 @@ def _normalize_trace_id(value):
     return (value or "").strip().lower().replace("-", "")
 
 
+def issues(request):
+    """
+    /issues/: "what should I fix first?" — exceptions by fingerprint, SQL by
+    query shape and endpoints by route, over a bounded window. A snapshot:
+    no HTMX polling, no pagination.
+    """
+    window = request.GET.get("window")
+    if window not in ISSUES_WINDOWS:
+        window = ISSUES_DEFAULT_WINDOW
+    since = timezone.now() - ISSUES_WINDOWS[window]
+
+    exceptions, exceptions_capped = issues_data.exception_groups(since)
+    queries, queries_capped = issues_data.query_shape_groups(since)
+    endpoints, endpoints_capped = issues_data.endpoint_stats(since)
+    hosts, hosts_capped = issues_data.http_host_stats(since)
+
+    context = {
+        "window": window,
+        "exceptions": exceptions,
+        "exceptions_capped": exceptions_capped,
+        "queries": queries,
+        "queries_capped": queries_capped,
+        "endpoints": endpoints,
+        "endpoints_capped": endpoints_capped,
+        "hosts": hosts,
+        "hosts_capped": hosts_capped,
+        "scan_limit": issues_data.ISSUES_SCAN_LIMIT,
+        "sampled": inspector_settings.SAMPLING_RATE < 1,
+    }
+    return render(request, "inspector/issues.html", context)
+
+
 def live_feed(request):
     qs = Event.objects.filter(event_type="request.completed").order_by("-timestamp")
     page = _paginate(request, qs)
@@ -96,7 +155,7 @@ def requests_list(request):
     trace = _normalize_trace_id(request.GET.get("trace"))
 
     if method:
-        qs = qs.filter(metadata__method=method)
+        qs = qs.filter(method=method)
     if status:
         status_map = {
             "2xx": (200, 300),
@@ -106,12 +165,15 @@ def requests_list(request):
         }
         if status in status_map:
             low, high = status_map[status]
-            qs = qs.filter(metadata__status_code__gte=low, metadata__status_code__lt=high)
+            qs = qs.filter(status_code__gte=low, status_code__lt=high)
     if path:
-        qs = qs.filter(metadata__path__icontains=path)
+        qs = qs.filter(path__icontains=path)
     if trace:
         qs = qs.filter(trace_id=trace)
     qs = _filter_dates(request, qs)
+
+    if request.GET.get("format") == "csv":
+        return export.csv_response(qs, export.REQUEST_COLUMNS, "requests.csv")
 
     page = _paginate(request, qs)
     context = {"page": page, "filters": request.GET}
@@ -121,6 +183,9 @@ def requests_list(request):
     return render(request, "inspector/requests/list.html", context)
 
 
+# The pin button posts a CSRF token; set the cookie here so it works even
+# when the host project doesn't run CsrfViewMiddleware.
+@ensure_csrf_cookie
 def request_detail(request, pk):
     event = get_object_or_404(Event, pk=pk, event_type="request.completed")
     trace_events = list(
@@ -139,6 +204,9 @@ def request_detail(request, pk):
     cache_hits, cache_misses = _cache_hits_and_misses(cache_events)
     log_records = [e for e in trace_events if e.event_type == "log.record"]
     signal_dispatches = [e for e in trace_events if e.event_type == "signal.dispatched"]
+    mail_events = [e for e in trace_events if e.event_type == "mail.sent"]
+    http_events = [e for e in trace_events if e.event_type == "http.request"]
+    tasks_sent = _resolve_sent_tasks(event.trace_id, trace_events)
 
     total_query_time = sum(e.metadata.get("duration_ms", 0) for e in queries)
     slow_queries = sum(1 for e in queries if e.metadata.get("is_slow"))
@@ -160,6 +228,9 @@ def request_detail(request, pk):
         "template_renders": len(template_renders),
         "log_records": len(log_records),
         "signal_dispatches": len(signal_dispatches),
+        "mail_sent": len(mail_events),
+        "http_calls": len(http_events),
+        "tasks_sent": len(tasks_sent),
     }
 
     waterfall_events = _waterfall(trace_events, event)
@@ -181,31 +252,117 @@ def request_detail(request, pk):
         "cache_event_types": CACHE_EVENT_TYPES,
         "log_records": log_records,
         "signal_dispatches": signal_dispatches,
+        "mail_events": mail_events,
+        "http_events": http_events,
+        "tasks_sent": tasks_sent,
         "trace_truncated": trace_truncated,
         "max_detail_events": MAX_DETAIL_EVENTS,
     }
     return render(request, "inspector/requests/detail.html", context)
 
 
+@ensure_csrf_cookie
 def trace_detail(request, trace_id):
-    """/trace/<id>/: jump to the request page of a trace id (e.g. one found in your logs)."""
-    event = (
-        Event.objects.filter(trace_id=_normalize_trace_id(trace_id), event_type="request.completed")
+    """
+    /trace/<id>/: a request trace redirects to its request page, as before.
+    Otherwise this renders the trace itself — a trace() run or a command
+    run, and later a task run — anchored on the first TRACE_ANCHOR_TYPES
+    event in it.
+    """
+    trace_id = _normalize_trace_id(trace_id)
+    request_event = (
+        Event.objects.filter(trace_id=trace_id, event_type="request.completed")
         .order_by("timestamp")
         .first()
     )
-    if event is None:
-        raise Http404("No request with that trace id.")
-    return redirect("inspector:request-detail", pk=event.pk)
+    if request_event is not None:
+        return redirect("inspector:request-detail", pk=request_event.pk)
+
+    trace_events = list(
+        Event.objects.filter(trace_id=trace_id).order_by("timestamp", "id")[: MAX_DETAIL_EVENTS + 1]
+    )
+    if not trace_events:
+        raise Http404("No trace with that id.")
+    trace_truncated = len(trace_events) > MAX_DETAIL_EVENTS
+    trace_events = trace_events[:MAX_DETAIL_EVENTS]
+
+    anchor = next((e for e in trace_events if e.event_type in TRACE_ANCHOR_TYPES), None)
+    waterfall_events = _waterfall(trace_events, anchor) if anchor is not None else []
+
+    parent_stored = None
+    if anchor is not None and anchor.event_type == "task.completed" and anchor.parent_trace_id:
+        parent_stored = Event.objects.filter(trace_id=anchor.parent_trace_id).exists()
+
+    context = {
+        "trace_id": trace_id,
+        "anchor": anchor,
+        "trace_events": trace_events,
+        "trace_truncated": trace_truncated,
+        "max_detail_events": MAX_DETAIL_EVENTS,
+        "waterfall_events": waterfall_events,
+        "cache_event_types": CACHE_EVENT_TYPES,
+        "pinned": trace_events[0].pinned,
+        "parent_stored": parent_stored,
+        "tasks_sent": _resolve_sent_tasks(trace_id, trace_events),
+    }
+    return render(request, "inspector/traces/detail.html", context)
 
 
-def request_export(request, pk):
-    """The request's whole trace as a JSON download."""
-    event = get_object_or_404(Event, pk=pk, event_type="request.completed")
-    events = Event.objects.filter(trace_id=event.trace_id).order_by("timestamp", "id")
+_TRACE_TYPE_FILTERS = {"trace": "trace.completed", "command": "command.completed", "task": "task.completed"}
+
+
+def traces_list(request):
+    """/traces/: non-request traces, newest first (CMD-04)."""
+    qs = Event.objects.filter(event_type__in=TRACE_ANCHOR_TYPES).order_by("-timestamp")
+
+    name = request.GET.get("name", "")
+    status = request.GET.get("status", "")
+    type_ = request.GET.get("type", "")
+
+    if name:
+        qs = qs.filter(metadata__name__icontains=name)
+    if status in ("ok", "error"):
+        qs = qs.filter(metadata__status=status)
+    if type_ in _TRACE_TYPE_FILTERS:
+        qs = qs.filter(event_type=_TRACE_TYPE_FILTERS[type_])
+    qs = _filter_dates(request, qs)
+
+    if request.GET.get("format") == "csv":
+        return export.csv_response(qs, export.TRACE_COLUMNS, "traces.csv")
+
+    page = _paginate(request, qs)
+    context = {"page": page, "filters": request.GET}
+
+    if request.headers.get("HX-Request"):
+        return render(request, "inspector/traces/_table.html", context)
+    return render(request, "inspector/traces/list.html", context)
+
+
+@csrf_protect
+@require_POST
+def trace_pin(request, trace_id):
+    """
+    Pin or unpin every event of a trace, keeping it out of RETENTION_HOURS
+    pruning and inspector_cleanup. csrf_protect applies the check itself, so
+    it holds even when the host project doesn't run CsrfViewMiddleware.
+    """
+    value = request.POST.get("pinned")
+    if value not in ("1", "0"):
+        return HttpResponseBadRequest("pinned must be 1 or 0")
+    pinned = value == "1"
+    trace_id = _normalize_trace_id(trace_id)
+    updated = Event.objects.filter(trace_id=trace_id).update(pinned=pinned)
+    if not updated:
+        raise Http404("No events for that trace id.")
+    return render(request, "inspector/_pin_button.html", {"trace_id": trace_id, "pinned": pinned})
+
+
+def _trace_export(trace_id, **extra):
+    """A trace's events as a JSON download, shared by request_export and trace_export."""
+    events = Event.objects.filter(trace_id=trace_id).order_by("timestamp", "id")
     data = {
-        "trace_id": event.trace_id,
-        "request_event_id": event.pk,
+        "trace_id": trace_id,
+        **extra,
         "events": [
             {
                 "id": e.pk,
@@ -217,8 +374,22 @@ def request_export(request, pk):
         ],
     }
     response = JsonResponse(data, json_dumps_params={"indent": 2})
-    response["Content-Disposition"] = 'attachment; filename="trace-%s.json"' % event.trace_id
+    response["Content-Disposition"] = 'attachment; filename="trace-%s.json"' % trace_id
     return response
+
+
+def request_export(request, pk):
+    """The request's whole trace as a JSON download."""
+    event = get_object_or_404(Event, pk=pk, event_type="request.completed")
+    return _trace_export(event.trace_id, request_event_id=event.pk)
+
+
+def trace_export(request, trace_id):
+    """trace/<id>/export.json: a non-request trace's whole set of events as a JSON download."""
+    trace_id = _normalize_trace_id(trace_id)
+    if not Event.objects.filter(trace_id=trace_id).exists():
+        raise Http404("No trace with that id.")
+    return _trace_export(trace_id)
 
 
 @lru_cache(maxsize=None)
@@ -254,6 +425,9 @@ def queries_list(request):
     if db_alias:
         qs = qs.filter(metadata__db_alias=db_alias)
 
+    if request.GET.get("format") == "csv":
+        return export.csv_response(qs, export.QUERY_COLUMNS, "queries.csv")
+
     page = _paginate(request, qs)
     context = {"page": page, "filters": request.GET}
 
@@ -279,6 +453,9 @@ def exceptions_list(request):
     if exc_type:
         qs = qs.filter(metadata__exception_type=exc_type)
     qs = _filter_dates(request, qs)
+
+    if request.GET.get("format") == "csv":
+        return export.csv_response(qs, export.EXCEPTION_COLUMNS, "exceptions.csv")
 
     page = _paginate(request, qs)
 
@@ -328,6 +505,9 @@ def cache_list(request):
     if key:
         qs = qs.filter(metadata__key__icontains=key)
 
+    if request.GET.get("format") == "csv":
+        return export.csv_response(qs, export.CACHE_COLUMNS, "cache.csv")
+
     page = _paginate(request, qs)
     context = {
         "page": page,
@@ -358,6 +538,9 @@ def templates_list(request):
         qs = qs.filter(metadata__name__icontains=name)
     if request.GET.get("top_level") == "on":
         qs = qs.filter(metadata__depth=0)
+
+    if request.GET.get("format") == "csv":
+        return export.csv_response(qs, export.TEMPLATE_COLUMNS, "templates.csv")
 
     page = _paginate(request, qs)
     context = {"page": page, "filters": request.GET}
@@ -397,16 +580,19 @@ def template_detail(request, pk):
 
 def _waterfall(trace_events, request_event):
     """
-    Bar positions for the waterfall view. The request event is stamped with
-    the request's start; other events are stamped when they finished, so a
-    bar starts at (timestamp - duration).
+    Bar positions for the waterfall view. The origin event (a request, or a
+    trace() anchor) is stamped with the trace's start; other events are
+    stamped when they finished, so a bar starts at (timestamp - duration).
     """
     start = request_event.timestamp
-    total_ms = request_event.metadata.get("latency_ms") or 1  # avoid zero division
+    own_duration = request_event.metadata.get("latency_ms")
+    if own_duration is None:
+        own_duration = request_event.metadata.get("duration_ms") or 0
+    total_ms = own_duration or 1  # avoid zero division
     rows = []
     for e in trace_events:
         if e.pk == request_event.pk:
-            offset_ms, duration_ms = 0.0, request_event.metadata.get("latency_ms") or 0
+            offset_ms, duration_ms = 0.0, own_duration
         else:
             duration_ms = e.metadata.get("duration_ms") or 0
             end_ms = (e.timestamp - start).total_seconds() * 1000
@@ -453,6 +639,9 @@ def logs_list(request):
     if message:
         qs = qs.filter(metadata__message__icontains=message)
 
+    if request.GET.get("format") == "csv":
+        return export.csv_response(qs, export.LOG_COLUMNS, "logs.csv")
+
     page = _paginate(request, qs)
     context = {"page": page, "filters": request.GET, "levels": LOG_LEVELS}
 
@@ -477,6 +666,9 @@ def signals_list(request):
         qs = qs.filter(metadata__signal=signal)
     if sender:
         qs = qs.filter(metadata__sender__icontains=sender)
+
+    if request.GET.get("format") == "csv":
+        return export.csv_response(qs, export.SIGNAL_COLUMNS, "signals.csv")
 
     page = _paginate(request, qs)
     context = {
@@ -503,8 +695,151 @@ def signal_detail(request, pk):
     return render(request, "inspector/signals/detail.html", context)
 
 
+def _resolve_sent_tasks(trace_id, trace_events):
+    """
+    Pairs each task.sent event in ``trace_events`` with the task trace it
+    started, if one exists: a single query for this trace's task.completed
+    anchors (parent_trace_id=trace_id), matched on metadata.task_id in
+    Python. A task.sent event with no match either hasn't run yet, or its
+    trace wasn't kept by sampling.
+    """
+    sent_events = [e for e in trace_events if e.event_type == "task.sent"]
+    if not sent_events:
+        return []
+    by_task_id = {
+        e.metadata.get("task_id"): e
+        for e in Event.objects.filter(event_type="task.completed", parent_trace_id=trace_id)
+    }
+    return [
+        {"event": e, "task_trace": by_task_id.get(e.metadata.get("task_id"))}
+        for e in sent_events
+    ]
+
+
 def _parent_request(event):
     """The request.completed event of the trace this event belongs to, if any."""
     return Event.objects.filter(
         trace_id=event.trace_id, event_type="request.completed"
     ).first()
+
+
+def mail_list(request):
+    qs = Event.objects.filter(event_type="mail.sent").order_by("-timestamp")
+
+    to = request.GET.get("to", "")
+    subject = request.GET.get("subject", "")
+    status = request.GET.get("status", "")
+
+    if to:
+        qs = qs.filter(metadata__to__icontains=to)
+    if subject:
+        qs = qs.filter(metadata__subject__icontains=subject)
+    if status in ("sent", "failed", "error"):
+        qs = qs.filter(metadata__status=status)
+    qs = _filter_dates(request, qs)
+
+    if request.GET.get("format") == "csv":
+        return export.csv_response(qs, export.MAIL_COLUMNS, "mail.csv")
+
+    page = _paginate(request, qs)
+    context = {"page": page, "filters": request.GET}
+
+    if request.headers.get("HX-Request"):
+        return render(request, "inspector/mail/_table.html", context)
+    return render(request, "inspector/mail/list.html", context)
+
+
+def mail_detail(request, pk):
+    event = get_object_or_404(Event, pk=pk, event_type="mail.sent")
+    return render(request, "inspector/mail/detail.html", {"event": event})
+
+
+_HTTP_STATUS_CLASSES = {
+    "2xx": (200, 300), "3xx": (300, 400), "4xx": (400, 500), "5xx": (500, 600),
+}
+
+
+def http_list(request):
+    qs = Event.objects.filter(event_type="http.request").order_by("-timestamp")
+
+    host = request.GET.get("host", "")
+    status = request.GET.get("status", "")
+
+    if host:
+        qs = qs.filter(path__icontains=host)
+    if status in _HTTP_STATUS_CLASSES:
+        low, high = _HTTP_STATUS_CLASSES[status]
+        qs = qs.filter(status_code__gte=low, status_code__lt=high)
+    if request.GET.get("errors") == "on":
+        qs = qs.filter(metadata__error__isnull=False)
+    qs = _filter_dates(request, qs)
+
+    if request.GET.get("format") == "csv":
+        return export.csv_response(qs, export.HTTP_COLUMNS, "http.csv")
+
+    page = _paginate(request, qs)
+    context = {"page": page, "filters": request.GET}
+
+    if request.headers.get("HX-Request"):
+        return render(request, "inspector/http/_table.html", context)
+    return render(request, "inspector/http/list.html", context)
+
+
+def http_detail(request, pk):
+    event = get_object_or_404(Event, pk=pk, event_type="http.request")
+    context = {"event": event, "parent_request": _parent_request(event)}
+    return render(request, "inspector/http/detail.html", context)
+
+
+@xframe_options_sameorigin
+def mail_preview(request, pk):
+    """
+    The stored HTML body, rendered nowhere but here: a sandboxed, scriptless,
+    same-origin iframe target with its own locked-down CSP (MAIL-03).
+    """
+    event = get_object_or_404(Event, pk=pk, event_type="mail.sent")
+    html_body = event.metadata.get("html_body")
+    if html_body is None:
+        raise Http404("This message has no HTML body.")
+    response = HttpResponse(html_body, content_type="text/html; charset=utf-8")
+    response["Content-Security-Policy"] = MAIL_PREVIEW_CSP
+    return response
+
+
+def mail_eml(request, pk):
+    """
+    Rebuilds the message from its stored (already-masked) fields as a MIME
+    document — no connection, never sent. Attachment contents were never
+    stored, so they're listed in a header instead of included (MAIL-02).
+    """
+    event = get_object_or_404(Event, pk=pk, event_type="mail.sent")
+    message = _rebuild_email_message(event.metadata)
+    response = HttpResponse(message.message().as_bytes(), content_type="message/rfc822")
+    response["Content-Disposition"] = 'attachment; filename="%s"' % _eml_filename(event)
+    return response
+
+
+def _rebuild_email_message(metadata):
+    message = EmailMultiAlternatives(
+        subject=metadata.get("subject") or "",
+        body=metadata.get("text_body") or "",
+        from_email=metadata.get("from_email") or None,
+        to=list(metadata.get("to") or []),
+        cc=list(metadata.get("cc") or []),
+        bcc=list(metadata.get("bcc") or []),
+        reply_to=list(metadata.get("reply_to") or []),
+        headers=dict(metadata.get("headers") or {}),
+    )
+    html_body = metadata.get("html_body")
+    if html_body:
+        message.attach_alternative(html_body, "text/html")
+    attachments = metadata.get("attachments") or []
+    if attachments:
+        names = ", ".join(a.get("filename") or "(unnamed)" for a in attachments)
+        message.extra_headers["X-Inspector-Omitted-Attachments"] = names
+    return message
+
+
+def _eml_filename(event):
+    slug = slugify(event.metadata.get("subject") or "")
+    return "%s.eml" % (slug or "mail-%s" % event.pk)

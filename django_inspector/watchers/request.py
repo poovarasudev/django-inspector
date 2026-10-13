@@ -68,6 +68,12 @@ class RequestWatcher(BaseWatcher):
             "query_params": dict(request.GET),
         }
 
+        # DASH-04: the URL pattern and resolved view, for grouping endpoints
+        # by route instead of by raw (id-bearing) path.
+        match = getattr(request, "resolver_match", None)
+        metadata["route"] = match.route if match else None
+        metadata["view"] = getattr(match, "_func_path", None) if match else None
+
         # REQ-02: request and response headers
         metadata["request_headers"] = _extract_headers(request.META)
         metadata["response_headers"] = dict(response.items()) if response else {}

@@ -4,17 +4,8 @@ import logging
 from asgiref.sync import sync_to_async
 
 from django_inspector.conf import inspector_settings
-from django_inspector.sampling import (
-    compute_sampling_decision,
-    early_pick,
-    reset_detail,
-    start_detail,
-)
-from django_inspector.tracing.context import (
-    clear_trace_id,
-    generate_trace_id,
-    set_trace_id,
-)
+from django_inspector.sampling import compute_sampling_decision
+from django_inspector.tracing.scope import TraceScope
 
 try:
     from asgiref.sync import iscoroutinefunction, markcoroutinefunction
@@ -40,6 +31,11 @@ class InspectorMiddleware:
     3. Notify watchers (request watcher on_request/on_response).
     4. Flush buffered watcher events to the database at end-of-request.
     5. Clean up the context variable after the response is returned.
+
+    Built on TraceScope, the same trace lifecycle the public trace() API
+    uses (TRACE-02): start() begins the trace, flush() writes or discards
+    its events depending on the sampling decision, and close() resets the
+    context, all in the same order this middleware always used.
 
     Add to MIDDLEWARE *before* any other middleware that needs trace context:
         MIDDLEWARE = [
@@ -70,29 +66,26 @@ class InspectorMiddleware:
         if should_ignore_path(request.path) or is_dashboard_path(request.path):
             return self.get_response(request)
 
-        trace_id = generate_trace_id()
-        token = set_trace_id(trace_id)
-        request.inspector_trace_id = trace_id
-        pick = early_pick()
-        state_tokens = self._start_request_state(pick)
+        scope = TraceScope.start()
+        request.inspector_trace_id = scope.trace_id
 
         self._notify_request_start(request)
 
+        # An exception escaping get_response (e.g. DEBUG_PROPAGATE_EXCEPTIONS)
+        # skips the sampling decision; the trace is kept and still flushed.
+        sampled = True
         try:
             response = self.get_response(request)
             self._notify_request_end(request, response)
-            sampled = compute_sampling_decision(request, response, pick)
+            sampled = compute_sampling_decision(request, response, scope.pick)
             request.inspector_sampled = sampled
-            if not sampled:
-                from django_inspector.storage.flush import clear_buffer
-                clear_buffer()
         finally:
             try:
-                self._flush()
+                scope.flush(sampled)
             finally:
-                self._reset_request_state(state_tokens)
-                clear_trace_id(token)
+                scope.close()
 
+        self._set_trace_header(response, sampled, scope.trace_id)
         return response
 
     async def __acall__(self, request):
@@ -108,53 +101,25 @@ class InspectorMiddleware:
         if should_ignore_path(request.path) or is_dashboard_path(request.path):
             return await self.get_response(request)
 
-        trace_id = generate_trace_id()
-        token = set_trace_id(trace_id)
-        request.inspector_trace_id = trace_id
-        pick = early_pick()
-        state_tokens = self._start_request_state(pick)
+        scope = TraceScope.start()
+        request.inspector_trace_id = scope.trace_id
 
         self._notify_request_start(request)
 
+        sampled = True  # kept when an exception escapes, as in __call__
         try:
             response = await self.get_response(request)
             await sync_to_async(self._notify_request_end)(request, response)
-            sampled = compute_sampling_decision(request, response, pick)
+            sampled = compute_sampling_decision(request, response, scope.pick)
             request.inspector_sampled = sampled
-            if not sampled:
-                from django_inspector.storage.flush import clear_buffer
-                clear_buffer()
         finally:
             try:
-                await sync_to_async(self._flush)()
+                await sync_to_async(scope.flush)(sampled)
             finally:
-                self._reset_request_state(state_tokens)
-                clear_trace_id(token)
+                scope.close()
 
+        self._set_trace_header(response, sampled, scope.trace_id)
         return response
-
-    @staticmethod
-    def _start_request_state(pick=None):
-        """
-        Fresh per-request event buffer and SQL query log. Without this, requests
-        whose context inherits a buffer share one list, and one request's flush
-        can clear another's events mid-flight. Also records whether detailed
-        watchers capture (False when early sampling didn't pick the request).
-        """
-        from django_inspector.storage.flush import start_buffer
-        from django_inspector.watchers.sql import start_query_log
-
-        return start_buffer(), start_query_log(), start_detail(pick is not False)
-
-    @staticmethod
-    def _reset_request_state(tokens):
-        from django_inspector.storage.flush import reset_buffer
-        from django_inspector.watchers.sql import reset_query_log
-
-        buffer_token, query_log_token, detail_token = tokens
-        reset_detail(detail_token)
-        reset_query_log(query_log_token)
-        reset_buffer(buffer_token)
 
     @staticmethod
     def _request_watcher():
@@ -187,25 +152,25 @@ class InspectorMiddleware:
                 raise
             logger.warning("inspector: error in _notify_request_end", exc_info=True)
 
-    def _flush(self):
+    def _set_trace_header(self, response, sampled, trace_id):
+        """
+        TRACE-05: X-Inspector-Trace on a kept trace's response, when
+        TRACE_HEADER allows it. An unkept trace never gets the header: it
+        would point at a trace that doesn't exist.
+        """
         try:
-            from django_inspector.storage.flush import flush_events
-            flush_events()
+            if sampled and self._trace_header_enabled():
+                response["X-Inspector-Trace"] = trace_id
         except Exception:
             if inspector_settings.INSPECTOR_RAISE_ERRORS:
                 raise
-            logger.warning("inspector: flush_events failed", exc_info=True)
-        try:
-            from django_inspector.storage.retention import maybe_prune
-            maybe_prune()
-        except Exception:
-            if inspector_settings.INSPECTOR_RAISE_ERRORS:
-                raise
-            logger.warning("inspector: pruning old events failed", exc_info=True)
-        try:
-            from django_inspector.watchers.sql import clear_query_log
-            clear_query_log()
-        except Exception:
-            if inspector_settings.INSPECTOR_RAISE_ERRORS:
-                raise
-            logger.warning("inspector: clear_query_log failed", exc_info=True)
+            logger.warning("inspector: error setting X-Inspector-Trace", exc_info=True)
+
+    @staticmethod
+    def _trace_header_enabled():
+        from django.conf import settings
+
+        value = inspector_settings.TRACE_HEADER
+        if value == "debug":
+            return bool(settings.DEBUG)
+        return bool(value)

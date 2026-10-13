@@ -1,4 +1,5 @@
 from django import template
+from django.http import QueryDict
 
 from django_inspector import __version__
 
@@ -20,3 +21,21 @@ def page_query(context, number):
         return "page=%s" % number
     params["page"] = number
     return params.urlencode()
+
+
+@register.simple_tag(takes_context=True)
+def csv_query(context):
+    """The current filters as a query string with ``format=csv`` (DASH-03), no ``page``."""
+    request = getattr(context, "request", None)
+    params = request.GET.copy() if request is not None else QueryDict(mutable=True)
+    params.pop("page", None)
+    params["format"] = "csv"
+    return params.urlencode()
+
+
+@register.filter
+def dotted_tail(value):
+    """The last dotted segment of a value, e.g. a backend or message class's dotted path."""
+    if not value:
+        return value
+    return str(value).rsplit(".", 1)[-1]

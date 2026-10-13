@@ -192,6 +192,7 @@ body {
 .inspector-badge--3xx { background: var(--ins-status-3xx); }
 .inspector-badge--4xx { background: var(--ins-status-4xx); }
 .inspector-badge--5xx { background: var(--ins-status-5xx); }
+.inspector-badge--pinned { background: var(--ins-accent); margin-left: 6px; }
 
 /* Method badge */
 .inspector-method-badge {
@@ -304,6 +305,9 @@ body {
 .inspector-timeline-item--template::before { background: #9b59b6; }
 .inspector-timeline-item--log::before { background: #e67e22; }
 .inspector-timeline-item--signal::before { background: #1abc9c; }
+.inspector-timeline-item--mail::before { background: #16a085; }
+.inspector-timeline-item--http::before { background: #34495e; }
+.inspector-timeline-item--task::before { background: #8e44ad; }
 
 /* Waterfall */
 .inspector-waterfall {
@@ -355,6 +359,9 @@ body {
 .inspector-waterfall-bar--template { background: #9b59b6; }
 .inspector-waterfall-bar--log { background: #e67e22; }
 .inspector-waterfall-bar--signal { background: #1abc9c; }
+.inspector-waterfall-bar--mail { background: #16a085; }
+.inspector-waterfall-bar--http { background: #34495e; }
+.inspector-waterfall-bar--task { background: #8e44ad; }
 
 /* Summary cards */
 .inspector-summary {

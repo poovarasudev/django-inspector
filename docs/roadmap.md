@@ -8,8 +8,8 @@
 
 - ✅ **v1.0 MVP** — Phases 1–3 (shipped 2026-05-03, tag `v1.0`)
 - ✅ **v1.1 Phase-1 Completion + Production Safety** — Phases 4–7 (complete 2026-09-30; releases as package version **0.2.0**, tag and PyPI publish pending)
-- 📋 **v1.2 Phase-2 PRD Watchers** — Model, Email, Management Command, Middleware (planned)
-- 📋 **v1.3 Phase-3 PRD Watchers** — Celery, Scheduler, HTTP Client, Redis (planned)
+- 🚧 **v1.2 Beyond the Request** — Phases 8–13 (in progress on `feat/v1.2-beyond-the-request`; releases as package version **0.3.0**)
+- ✅ **v1.3 Outgoing Calls & Tasks** — Phases 14–15 (HTTP client and Celery watchers; complete 2026-10-01 on `feat/v1.2-beyond-the-request`)
 
 ## Phases
 
@@ -140,17 +140,165 @@ Work items:
 
 ---
 
-### 📋 v1.2 Phase-2 PRD Watchers (Planned)
+### 🚧 v1.2 Beyond the Request (In progress)
 
-**Milestone Goal:** Implement PRD §11.8–§11.11 (Model, Email, Management Command, Middleware watchers) on top of the v1.1 safety foundation. Also: introduce optional async persistence and denormalized hot-path columns if v1.1 telemetry shows they are needed.
+**Milestone Goal:** Trace work that isn't an HTTP request, and turn stored events into answers. Comes from the product discovery in [`discovery/2026-09-30-next-features.md`](discovery/2026-09-30-next-features.md). The Model and Middleware watchers the PRD lists for this stage are deferred (discovery §4): both cost more per request than they give back.
 
-Phases not yet broken down.
+**Decisions taken for the milestone:**
+- No spans yet. Nothing planned needs them; `parent_trace_id` links traces instead.
+- Celery tasks get their own trace, linked to the request that sent them (a task is sent before the request's keep-or-drop decision, so writing into the request's trace would orphan events).
+- Management commands are traced only on opt-in (`COMMAND_WATCH_LIST`).
 
-### 📋 v1.3 Phase-3 PRD Watchers (Planned)
+---
 
-**Milestone Goal:** Implement PRD §11.12–§11.15 (Celery, Scheduler, HTTP Client, Redis watchers). Introduces optional dependencies (gated behind extras).
+#### Phase 8: Event Schema v2
+**Goal**: Give `Event` the real columns later phases group and filter on, before more watchers multiply the rows.
+**Depends on**: Phase 7
+**Requirements**: SCHEMA-01..06
+**Spec**: [2026-09-30-event-schema-v2-design.md](superpowers/specs/2026-09-30-event-schema-v2-design.md)
+**Success Criteria** (what must be TRUE):
+  1. A new migration adds `method`, `status_code`, `path`, `duration_ms`, `fingerprint`, `parent_trace_id` and `pinned`; `0001`/`0002` are unchanged and old rows still display.
+  2. Two SQL events with the same query shape share a fingerprint; so do two exceptions of the same type raised from the same function, even after the line moves.
+  3. A pinned trace survives `RETENTION_HOURS` pruning and `inspector_cleanup`.
+  4. `Event` shows in the Django admin and cannot be edited there.
+  5. Filtering requests by method, status or path uses the columns (no JSON lookup in the query).
 
-Phases not yet broken down.
+Work items:
+- [x] Migration and write-time column filling
+- [x] SQL and exception fingerprints
+- [x] Pinning (model, retention, dashboard toggle)
+- [x] Read-only admin
+- [x] Dashboard filters on columns
+
+---
+
+#### Phase 9: Trace API
+**Goal**: A public way to start a trace anywhere, which the middleware itself uses; plus the ways back from an app to its trace.
+**Depends on**: Phase 8
+**Requirements**: TRACE-01..07, CMD-04 (moved from Phase 10)
+**Spec**: [2026-09-30-trace-api-design.md](superpowers/specs/2026-09-30-trace-api-design.md)
+**Success Criteria** (what must be TRUE):
+  1. `with django_inspector.trace("backfill"):` and `@django_inspector.trace("job")` record SQL, logs and exceptions into one trace, on sync and async code, with no middleware involved.
+  2. The existing middleware test suite passes unchanged on top of the trace API, and the benchmark stays within budget.
+  3. Nested `trace()` calls join the outer trace.
+  4. A failing traced block is always kept; a successful one is kept at `SAMPLING_RATE`.
+  5. With `DEBUG` on, responses carry `X-Inspector-Trace`; with it off, they don't (unless the setting says so); unkept traces never get the header.
+  6. Adding the filter to a logging handler makes `%(inspector_trace_id)s` usable in its format.
+  7. `/trace/<id>/` renders a `trace()` trace, request traces still open the request page, and a Traces page lists non-request traces.
+
+Work items:
+- [x] `trace()` context manager / decorator and lifecycle extraction
+- [x] Middleware rebuilt on `trace()`
+- [x] `X-Inspector-Trace` header
+- [x] Trace-id logging filter
+- [x] General trace page and Traces list (CMD-04)
+
+---
+
+#### Phase 10: Management Command Watcher
+**Goal**: Each chosen management command run becomes a trace with its SQL, logs and exceptions.
+**Depends on**: Phase 9
+**Requirements**: CMD-01..03 (CMD-04 shipped in Phase 9)
+**Spec**: [2026-09-30-command-watcher-design.md](superpowers/specs/2026-09-30-command-watcher-design.md)
+**Success Criteria** (what must be TRUE):
+  1. Running a command listed in `COMMAND_WATCH_LIST` produces a trace with a `command.completed` event (name, args, options, bounded stdout/stderr, duration, exit code) and its SQL/log/exception events.
+  2. Unlisted commands, and `runserver`, `test`, `shell`, `migrate` and `inspector_cleanup` even when listed, record nothing.
+  3. A command running 100k queries keeps flat memory, and killing it midway leaves the already-flushed events in the database.
+  4. Command traces appear on the Traces page and render on `/trace/<id>/`.
+
+Work items:
+- [x] Command watcher (hook, allowlist, denylist)
+- [x] Chunked flush and bounded query stats
+- [x] Command traces on the Traces page
+
+---
+
+#### Phase 11: Query Guard for Tests
+**Goal**: Catch N+1 and duplicate queries in CI with a message that says where they came from.
+**Depends on**: Phase 7 (independent of 8–10)
+**Requirements**: TEST-01..04
+**Spec**: [2026-09-30-query-guard-design.md](superpowers/specs/2026-09-30-query-guard-design.md)
+**Success Criteria** (what must be TRUE):
+  1. `with assert_queries(max=5, no_n_plus_one=True):` fails when a block runs an N+1, with no middleware and no events written.
+  2. The failure message names each offending query shape, its count, and the file and line it ran from.
+  3. The pytest fixture works when pytest is installed and the package imports cleanly when it isn't; the `TestCase` decorator works on methods and classes.
+  4. `N_PLUS_ONE="raise"` raises on an N+1 in a `DEBUG` request and does nothing with `DEBUG` off.
+
+Work items:
+- [x] `assert_queries` context manager
+- [x] pytest fixture and `TestCase` decorator
+- [x] `N_PLUS_ONE` development mode
+
+---
+
+#### Phase 12: Issues Page & CSV Export
+**Goal**: A landing page that answers "what should I fix first?".
+**Depends on**: Phase 8
+**Requirements**: DASH-04, DASH-03
+**Spec**: [2026-09-30-issues-page-design.md](superpowers/specs/2026-09-30-issues-page-design.md)
+**Success Criteria** (what must be TRUE):
+  1. The Issues page lists exceptions grouped by fingerprint, query shapes and endpoints with the numbers in DASH-04, each linking to example traces.
+  2. The page responds in bounded time at the `CappedPaginator` limits on SQLite and PostgreSQL.
+  3. With `SAMPLING_RATE` below 1, counts are labelled as estimates.
+  4. Dashboard lists export to CSV, masked like the JSON export.
+
+Work items:
+- [x] Aggregates (exceptions, query shapes, endpoints)
+- [x] Issues page
+- [x] CSV export
+
+---
+
+#### Phase 13: Email Watcher
+**Goal**: See every email the app sends, as it would arrive.
+**Depends on**: Phase 9
+**Requirements**: MAIL-01..03
+**Spec**: [2026-09-30-email-watcher-design.md](superpowers/specs/2026-09-30-email-watcher-design.md)
+**Success Criteria** (what must be TRUE):
+  1. Sending mail during a trace records a `mail.sent` event with recipients, subject, bodies, backend and attachment names/sizes.
+  2. The dashboard previews the HTML body with scripts and remote content blocked, and downloads the message as `.eml`.
+  3. Bodies are masked before they are stored.
+
+Work items:
+- [x] Email watcher
+- [x] Mail dashboard page, preview and `.eml` export
+
+---
+
+### ✅ v1.3 Outgoing Calls & Tasks (Complete 2026-10-01)
+
+**Milestone Goal:** Show time spent calling other services, and follow a request into the Celery tasks it sends. Both libraries stay optional: imported lazily, never dependencies.
+
+#### Phase 14: HTTP Client Watcher
+**Goal**: Outgoing `requests`/`httpx` calls appear in the trace.
+**Depends on**: Phase 12
+**Requirements**: HTTP-01..03
+**Spec**: [2026-09-30-http-client-watcher-design.md](superpowers/specs/2026-09-30-http-client-watcher-design.md)
+**Success Criteria** (what must be TRUE):
+  1. A `requests` or `httpx` (sync or async) call during a trace records an `http.request` event with method, masked URL, status, duration and error.
+  2. Without `requests`/`httpx` installed, the package imports and the watcher does nothing.
+  3. The Issues page ranks slow hosts.
+
+Work items:
+- [x] `requests` instrumentation
+- [x] `httpx` sync and async instrumentation
+- [x] Dashboard page and Issues integration
+
+#### Phase 15: Celery Watcher
+**Goal**: Every task run is a trace, linked to the request that sent it.
+**Depends on**: Phases 8, 9
+**Requirements**: CELERY-01..05
+**Spec**: [2026-09-30-celery-watcher-design.md](superpowers/specs/2026-09-30-celery-watcher-design.md)
+**Success Criteria** (what must be TRUE):
+  1. A task sent from a view carries the view's trace id; the worker records the task as its own trace with `parent_trace_id` set.
+  2. The task trace has the CELERY-03 fields, with args and kwargs masked.
+  3. Without Celery installed, the package imports and the watcher does nothing.
+  4. The request's trace page lists the tasks it sent; each task links back.
+
+Work items:
+- [x] Header propagation and worker-side trace
+- [x] Task event capture
+- [x] Trace page links
 
 ## Progress
 
@@ -163,6 +311,14 @@ Phases not yet broken down.
 | 5. Cache & Template Watchers | v1.1 | 1/1 | Complete | 2026-09-30 |
 | 6. Signal & Logging Watchers | v1.1 | 1/1 | Complete | 2026-09-30 |
 | 7. ASGI Verification & Release Prep | v1.1 | 1/1 | Complete | 2026-09-30 |
+| 8. Event Schema v2 | v1.2 | 1/1 | Complete | 2026-09-30 |
+| 9. Trace API | v1.2 | 1/1 | Complete | 2026-09-30 |
+| 10. Management Command Watcher | v1.2 | 1/1 | Complete | 2026-09-30 |
+| 11. Query Guard for Tests | v1.2 | 1/1 | Complete | 2026-09-30 |
+| 12. Issues Page & CSV Export | v1.2 | 1/1 | Complete | 2026-09-30 |
+| 13. Email Watcher | v1.2 | 1/1 | Complete | 2026-09-30 |
+| 14. HTTP Client Watcher | v1.3 | 1/1 | Complete | 2026-10-01 |
+| 15. Celery Watcher | v1.3 | 1/1 | Complete | 2026-10-01 |
 
 ## How work proceeds
 
@@ -183,12 +339,11 @@ Carried over from the GSD state file on 2026-09-30:
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
 | Storage | `AbstractStorageBackend` | Deferred to first non-ORM backend | v1.1 init |
-| Persistence | Async write offload (thread pool / Celery) | Deferred to v1.2 | v1.1 init |
-| Schema | Denormalized event columns (`method`, `status_code`, `path`); 0.2.0 added an `(event_type, -timestamp)` index and capped list counts | Deferred to v1.2 | v1.1 init |
+| Persistence | Async write offload (thread pool / Celery); measure the share of `bulk_create` in the p50 first | Deferred past v1.2 | v1.1 init |
 | Masking | Mask SQL parameters by column name (0.2.0 adds `SQL_CAPTURE_PARAMS` to turn them off) | Deferred | Review |
 | Support | Drop Python 3.8/3.9 and Django < 4.2 (all past end of life) | Planned for 0.3.0 | Review |
 | Plugins | `setuptools` entry_points for external watchers | Deferred | v1.1 init |
-| Dashboard | Comparison, CSV export (trace-id search and JSON export shipped in 0.2.0) | Deferred | v1.1 init |
+| Dashboard | Comparison (trace-id search and JSON export shipped in 0.2.0; CSV export is Phase 12) | Deferred | v1.1 init |
 | Watchers | Jinja2 template renders | Deferred | Phase 5 |
 | Watchers | Watching all signals (only `SIGNAL_WATCH_LIST` is supported) | Deferred | Phase 6 |
 | Watchers | Cache `has_key` / `incr` / `decr` / `touch`; value size for non-str/bytes values | Deferred | Phase 5 |

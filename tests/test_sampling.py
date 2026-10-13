@@ -9,8 +9,46 @@ import time
 import pytest
 from django.test import TestCase, override_settings
 
-from django_inspector.sampling import compute_sampling_decision, detail_enabled
+from django_inspector.sampling import compute_sampling_decision, detail_enabled, should_keep
 from django_inspector.storage.models import Event
+
+
+class TestShouldKeep:
+    @override_settings(DJANGO_INSPECTOR={"SAMPLING_RATE": 1.0})
+    def test_rate_1_always_keeps(self):
+        assert should_keep(False, 0) is True
+
+    @override_settings(DJANGO_INSPECTOR={"SAMPLING_RATE": 0.0})
+    def test_rate_0_drops_a_fast_ok_run(self):
+        assert should_keep(False, 0) is False
+
+    @override_settings(DJANGO_INSPECTOR={"SAMPLING_RATE": 0.0})
+    def test_failed_is_always_kept(self):
+        assert should_keep(True, 0) is True
+
+    @override_settings(DJANGO_INSPECTOR={"SAMPLING_RATE": 0.0, "SLOW_REQUEST_THRESHOLD_MS": 100})
+    def test_slow_is_always_kept(self):
+        assert should_keep(False, 150) is True
+
+    @override_settings(DJANGO_INSPECTOR={"SAMPLING_RATE": 0.0, "SLOW_REQUEST_THRESHOLD_MS": 100})
+    def test_below_threshold_is_not_slow(self):
+        assert should_keep(False, 50) is False
+
+    @override_settings(DJANGO_INSPECTOR={"SAMPLING_RATE": 0.0})
+    def test_early_pick_true_keeps_regardless_of_rate(self):
+        assert should_keep(False, 0, early_pick=True) is True
+
+    @override_settings(DJANGO_INSPECTOR={"SAMPLING_RATE": 0.99})
+    def test_early_pick_false_drops_a_fast_ok_run_whatever_the_rate(self):
+        assert should_keep(False, 0, early_pick=False) is False
+
+    @override_settings(DJANGO_INSPECTOR={"SAMPLING_RATE": 0.0})
+    def test_early_pick_false_still_keeps_a_failed_run(self):
+        assert should_keep(True, 0, early_pick=False) is True
+
+    @override_settings(DJANGO_INSPECTOR={"SAMPLING_RATE": 1.0})
+    def test_duration_none_is_accepted(self):
+        assert should_keep(False, None) is True
 
 
 class MockResponse:

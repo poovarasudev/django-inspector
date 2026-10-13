@@ -1,0 +1,57 @@
+{% extends "inspector/base.html" %}
+{% block title %}HTTP Detail — Inspector{% endblock %}
+{% block content %}
+<a href="{% url 'inspector:http-list' %}" class="inspector-back-link">&#8592; Back to HTTP</a>
+
+<div class="inspector-page-header">
+    <h1>
+        <span class="inspector-method-badge inspector-method-badge--{{ event.metadata.method|lower }}">{{ event.metadata.method }}</span>
+        {{ event.metadata.host|default:"-" }}
+    </h1>
+</div>
+
+<div class="inspector-card">
+    <table class="inspector-detail-table">
+        <tr><th>Library</th><td class="inspector-code-inline">{{ event.metadata.library }}</td></tr>
+        <tr><th>Method</th><td>{{ event.metadata.method }}</td></tr>
+        <tr><th>URL</th><td class="inspector-code-inline">{{ event.metadata.url }}</td></tr>
+        <tr><th>Host</th><td>{{ event.metadata.host|default:"-" }}</td></tr>
+        <tr>
+            <th>Status</th>
+            <td>
+                {% if event.metadata.error %}<span class="inspector-indicator inspector-indicator--slow">ERROR</span>
+                {% else %}
+                {% with sc=event.metadata.status_code %}
+                <span class="inspector-badge {% if sc >= 200 and sc < 300 %}inspector-badge--2xx{% elif sc >= 300 and sc < 400 %}inspector-badge--3xx{% elif sc >= 400 and sc < 500 %}inspector-badge--4xx{% elif sc >= 500 %}inspector-badge--5xx{% endif %}">{{ sc }}</span>
+                {% endwith %}
+                {% endif %}
+            </td>
+        </tr>
+        {% if event.metadata.error %}
+        <tr><th>Error</th><td>{{ event.metadata.error }}</td></tr>
+        {% endif %}
+        <tr><th>Duration</th><td>{{ event.metadata.duration_ms }}ms</td></tr>
+        <tr><th>Redirects</th><td>{{ event.metadata.redirects }}</td></tr>
+        <tr><th>Response size</th><td>{% if event.metadata.response_bytes is not None %}{{ event.metadata.response_bytes }} bytes{% else %}-{% endif %}</td></tr>
+        <tr><th>Streamed</th><td>{{ event.metadata.streamed|yesno:"Yes,No" }}</td></tr>
+        <tr><th>Origin File</th><td>{{ event.metadata.origin_file|default:"-" }}</td></tr>
+        <tr><th>Origin Line</th><td>{{ event.metadata.origin_line|default:"-" }}</td></tr>
+        <tr><th>Origin Function</th><td>{{ event.metadata.origin_function|default:"-" }}</td></tr>
+    </table>
+</div>
+
+{% if parent_request %}
+<div class="inspector-card">
+    <a href="{% url 'inspector:request-detail' parent_request.pk %}" style="color: var(--ins-accent); text-decoration: none; font-weight: 500;">
+        View Request &#8594; {{ parent_request.metadata.method }} {{ parent_request.metadata.path }}
+    </a>
+</div>
+{% else %}
+<div class="inspector-card">
+    <a href="{% url 'inspector:trace-detail' event.trace_id %}" style="color: var(--ins-accent); text-decoration: none; font-weight: 500;">
+        View Trace &#8594; <code class="inspector-code-inline">{{ event.trace_id }}</code>
+    </a>
+</div>
+{% endif %}
+
+{% endblock %}

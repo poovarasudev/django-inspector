@@ -6,7 +6,9 @@ SECRET_KEY = "django-inspector-test-secret-key"
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.auth",
+    "django.contrib.admin",
     "django_inspector",
+    "tests.testapp",
 ]
 MIDDLEWARE = [
     "django_inspector.middleware.InspectorMiddleware",
@@ -28,6 +30,11 @@ if os.environ.get("INSPECTOR_TEST_DB") == "postgres":
         "HOST": os.environ.get("PGHOST", "localhost"),
         "PORT": os.environ.get("PGPORT", "5432"),
     }
+# A second, always-sqlite alias for tests/test_query_guard.py's `using` coverage.
+DATABASES["secondary"] = {
+    "ENGINE": "django.db.backends.sqlite3",
+    "NAME": ":memory:",
+}
 USE_TZ = True
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 DJANGO_INSPECTOR = {
