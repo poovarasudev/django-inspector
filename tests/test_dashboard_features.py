@@ -744,8 +744,9 @@ class TestMailEml(DashboardClient):
                 text_body = part.get_payload(decode=True).decode()
             elif part.get_content_type() == "text/html":
                 html_body = part.get_payload(decode=True).decode()
-        assert text_body == "Click here"
-        assert html_body == "<p>Click here</p>"
+        # Django 6.0+ serialises through email.message, which ends a text part with a newline.
+        assert text_body.rstrip("\r\n") == "Click here"
+        assert html_body.rstrip("\r\n") == "<p>Click here</p>"
 
     def test_eml_never_includes_attachment_contents(self):
         import email
